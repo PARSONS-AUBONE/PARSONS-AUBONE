@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<title>The Joneses — Insights</title>
+<style>
+  :root { --bg:#0f1116; --panel:#1a1d24; --panel-2:#232730; --text:#e8eaed; --muted:#9aa0a6; --accent:#4eccc6; --border:#2a2e36; --success:#00c875; --warning:#fdab3d; --danger:#df2f4a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:24px 40px 16px; border-bottom:1px solid var(--border); display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  h1 { font-size:24px; margin:0; font-weight:600; }
+  .subtitle { color:var(--muted); font-size:12px; }
+  .tabs { display:flex; gap:4px; flex-wrap:wrap; }
+  .tab { padding:7px 14px; cursor:pointer; border-radius:7px; font-size:13px; color:var(--muted); }
+  .tab:hover { color:var(--text); }
+  .tab.active { background:var(--accent); color:#000; font-weight:600; }
+  main { padding:26px 40px; max-width:1400px; margin:0 auto; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-bottom:18px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; }
+  .card.wide { grid-column:span 2; }
+  .card h2 { font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin:0 0 14px; font-weight:600; }
+  .stat-big { font-size:40px; font-weight:600; line-height:1; }
+  .stat-label { color:var(--muted); font-size:13px; margin-top:4px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; padding:7px 8px 7px 0; color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid var(--border); }
+  td { padding:9px 8px 9px 0; border-bottom:1px solid var(--border); vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  .avatar { width:32px; height:32px; border-radius:50%; background:var(--panel-2); display:inline-flex; align-items:center; justify-content:center; font-size:16px; vertical-align:middle; margin-right:8px; overflow:hidden; flex-shrink:0; }
+  .avatar img { width:100%; height:100%; object-fit:cover; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:500; }
+  .chart-row { display:flex; align-items:center; padding:5px 0; font-size:13px; gap:10px; }
+  .chart-label { min-width:200px; }
+  .chart-bar { flex:1; height:16px; background:var(--panel-2); border-radius:4px; overflow:hidden; }
+  .chart-bar-fill { height:100%; border-radius:4px; }
+  .chart-value { min-width:40px; text-align:right; color:var(--muted); }
+  .legend-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
+  .progress { height:6px; background:var(--panel-2); border-radius:3px; overflow:hidden; margin-top:8px; }
+  .progress-fill { height:100%; }
+  .quick-links { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; }
+  .quick-link { background:var(--panel-2); border:1px solid var(--border); padding:12px; border-radius:8px; text-align:center; display:block; transition:border-color .15s; }
+  .quick-link:hover { border-color:var(--accent); }
+  .quick-link-name { font-weight:600; font-size:13px; margin-bottom:3px; }
+  .quick-link-meta { font-size:11px; color:var(--muted); }
+  a { color:var(--accent); text-decoration:none; }
+  .empty { color:var(--muted); text-align:center; padding:28px 0; font-size:13px; line-height:1.7; }
+  .bday-row { display:flex; align-items:center; padding:5px 0; font-size:13px; gap:8px; }
+  .bday-day { min-width:32px; font-size:18px; font-weight:600; color:var(--accent); }
+  .bday-soon { background:var(--danger); color:#fff; font-size:10px; padding:1px 7px; border-radius:99px; margin-left:6px; }
+  .stamp { font-size:11px; color:var(--muted); }
+  code { background:var(--panel-2); padding:1px 5px; border-radius:3px; font-size:11px; }
+  .row-link { cursor:pointer; }
+  .row-link:hover { color:var(--accent); }
+  /* ── Interactive card drawer + editors ── */
+  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--panel-2); border:1px solid var(--border); color:var(--text); padding:9px 16px; border-radius:8px; font-size:13px; z-index:400; opacity:0; transition:opacity .2s; pointer-events:none; box-shadow:0 6px 24px rgba(0,0,0,.45); }
+  .toast.show { opacity:1; } .toast.err { border-color:var(--danger); color:#ff8a9c; }
+  .picker-overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:300; display:flex; align-items:center; justify-content:center; }
+  .picker { width:380px; max-width:92vw; max-height:74vh; background:var(--panel); border:1px solid var(--border); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.6); }
+  .picker-head { padding:14px 16px 10px; border-bottom:1px solid var(--border); } .picker-head h3 { margin:0 0 8px; font-size:14px; }
+  .picker-head input, .picker-head select, .picker-head textarea { width:100%; padding:8px 10px; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; font-size:13px; }
+  .picker-list { overflow-y:auto; padding:6px; } .picker-item { display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:7px; cursor:pointer; font-size:13px; }
+  .picker-item:hover { background:var(--panel-2); } .picker-item .pi-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; } .picker-item .pi-sub { color:var(--muted); font-size:11px; margin-left:auto; }
+  .picker-foot { padding:8px 14px; border-top:1px solid var(--border); text-align:right; }
+  .btn-add { background:none; border:1px solid var(--border); color:var(--muted); min-width:20px; height:20px; line-height:1; border-radius:5px; cursor:pointer; font-size:13px; padding:0 4px; }
+  .btn-add:hover { color:var(--accent); border-color:var(--accent); }
+  .edit-link { color:var(--muted); cursor:pointer; font-size:11px; border:1px dashed var(--border); border-radius:5px; padding:1px 6px; margin-left:6px; } .edit-link:hover { color:var(--accent); border-color:var(--accent); }
+  .chip-x { margin-left:5px; opacity:.5; cursor:pointer; font-weight:700; } .chip-x:hover { opacity:1; color:#ff8a9c; }
+  .drawer-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:90; }
+  .card-drawer { position:fixed; top:0; right:0; width:392px; max-width:94vw; height:100vh; background:var(--panel); border-left:1px solid var(--border); z-index:100; overflow-y:auto; padding:18px; box-shadow:-12px 0 40px rgba(0,0,0,.45); }
+  .card-drawer .x-close { position:absolute; top:12px; right:14px; cursor:pointer; color:var(--muted); font-size:20px; }
+  .card-drawer .x-close:hover { color:var(--text); }
+  .info-photo { width:100%; aspect-ratio:1; border-radius:12px; background:var(--panel-2); border:1px solid var(--border); margin-bottom:6px; display:flex; align-items:center; justify-content:center; font-size:64px; color:var(--muted); overflow:hidden; }
+  .info-photo img { width:100%; height:100%; object-fit:cover; }
+  .info-name { font-size:20px; font-weight:600; margin-bottom:4px; } .info-meta { color:var(--muted); font-size:13px; margin-bottom:6px; }
+  .info-tags { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0 12px; }
+  .info-tag { background:var(--panel-2); padding:2px 9px; border-radius:999px; font-size:11px; border:1px solid var(--border); }
+  .info-section { margin-bottom:12px; padding-top:10px; border-top:1px solid var(--border); }
+  .info-section h3 { font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin:0 0 6px; }
+  .info-list { list-style:none; padding:0; margin:0; font-size:13px; } .info-list li { padding:3px 0; cursor:pointer; } .info-list li:hover { color:var(--accent); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<header>
+  <div>
+    <h1>The Joneses — Insights</h1>
+    <div class="subtitle" id="subtitle"></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-tab="overview">Overview</div>
+      <div class="tab" data-tab="calendar">Birthdays</div>
+      <div class="tab" data-tab="anniversaries">Anniversaries</div>
+      <div class="tab" data-tab="health">All People</div>
+      <div class="tab" data-tab="circles">Circles</div>
+    </div>
+    <button id="refresh-btn" class="tab" style="border:1px solid var(--border)">↻ Refresh from Monday</button>
+    <span class="stamp" id="stamp"></span>
+  </div>
+</header>
+
+<main id="content"></main>
+<div id="card-root"></div>
+
+<script>
+// ── DATA (regenerated 2026-06-28 18:34) ──────────────────────────────
+const GENERATED_AT = "2026-06-28 18:34";
+const PEOPLE = [];
+// ── END DATA ─────────────────────────────────────────────────────────
+
+// ── CONFIG ───────────────────────────────────────────────────────────
+const CONTACTS_BOARD = 18408024949;
+
+const CIRCLE_DEFS = [
+  {id:"12145324147",label:"Inner Circle",        colour:"#df2f4a"},
+  {id:"12145344671",label:"Steve's Circle",      colour:"#a25ddc"},
+  {id:"12208250357",label:"Club of Gentlemen",   colour:"#ffcb00"},
+  {id:"12208357512",label:"Pat Coyne's Circle",  colour:"#ff7575"},
+  {id:"12145330009",label:"School Parents",      colour:"#fdab3d"},
+  {id:"12145417298",label:"Parish — Opus Dei",   colour:"#225091"},
+  {id:"12145329931",label:"Southeast Neighbours",colour:"#4eccc6"},
+  {id:"12147767023",label:"PARED Football",      colour:"#037f4c"},
+  {id:"12147609836",label:"Comrades",            colour:"#9cd326"},
+  {id:"12147640823",label:"Friends of Drummond", colour:"#ff158a"},
+  {id:"12147622252",label:"Order of Malta",      colour:"#bb3354"},
+  {id:"12147753459",label:"HHC",                 colour:"#7e5bef"},
+  {id:"12147640824",label:"Argentinos AU",       colour:"#66ccff"},
+  {id:"12145329984",label:"August Family",       colour:"#faa1f1"},
+  {id:"12208215560",label:"Parsons-Aubone Family",colour:"#e84a8a"},
+  {id:"12145324149",label:"Waste Stream",        colour:"#9aa0a6"},
+  {id:"12389760806",label:"Cinthia · Inner Circle",colour:"#ff66b3"},
+  {id:"12389629873",label:"Santiago · Inner Circle",colour:"#3399ff"},
+  {id:"12389622774",label:"Sophia · Friends",     colour:"#ff8a5c"},
+  {id:"12389629503",label:"Augusto · Friends",    colour:"#7bd88f"},
+  {id:"12389629614",label:"Ian · Friends",        colour:"#ba8cff"},
+];
+
+const TODAY = (()=>{ const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); })();
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+// ── HELPERS ───────────────────────────────────────────────────────────
+function avatar(p) {
+  return `<div class="avatar">${p.photo?`<img src="${p.photo}" alt="" onerror="this.parentNode.innerHTML='👤'">`:"👤"}</div>`;
+}
+function tierColour(t){return t===5?"#df2f4a":t===15?"#fdab3d":t===50?"#4eccc6":"#579bfc";}
+
+function barChart(rows,maxVal){
+  const m=maxVal||Math.max(...rows.map(r=>r.val),1);
+  return rows.map(r=>`<div class="chart-row">
+    <div class="chart-label"><span class="legend-dot" style="background:${r.colour}"></span>${r.label}</div>
+    <div class="chart-bar"><div class="chart-bar-fill" style="width:${r.val/m*100}%;background:${r.colour}"></div></div>
+    <div class="chart-value">${r.val}</div>
+  </div>`).join("");
+}
+
+function getFamilyTree(p){
+  const byId=Object.fromEntries(PEOPLE.map(x=>[x.id,x]));
+  const uniq=arr=>[...new Map(arr.filter(Boolean).map(x=>[x.id,x])).values()];
+  const up=ids=>ids.map(id=>byId[id]).filter(Boolean);
+  const parents=uniq(up(p.parentIds));
+  const grandparents=uniq(parents.flatMap(x=>up(x.parentIds)));
+  const children=PEOPLE.filter(x=>x.parentIds.includes(p.id));
+  const grandchildren=uniq(children.flatMap(c=>PEOPLE.filter(x=>x.parentIds.includes(c.id))));
+  return {parents,grandparents,children,grandchildren};
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────
+function renderOverview(){
+  const total=PEOPLE.length;
+  const households=new Set(PEOPLE.map(p=>p.householdId).filter(Boolean)).size;
+  const inner=PEOPLE.filter(p=>p.closeness.tier===5).length;
+  const sympathy=PEOPLE.filter(p=>p.closeness.tier===15).length;
+  const active=PEOPLE.filter(p=>p.closeness.tier===50).length;
+  const extended=PEOPLE.filter(p=>p.closeness.tier===150).length;
+  const withPhoto=PEOPLE.filter(p=>p.photo).length;
+  const withBday=PEOPLE.filter(p=>p.birthday).length;
+  const withAnn=PEOPLE.filter(p=>p.anniversary).length;
+  const pct=Math.round(withPhoto/total*100)||0;
+  const circleRows=CIRCLE_DEFS.map(c=>({label:c.label,colour:c.colour,val:PEOPLE.filter(p=>p.circleIds.includes(c.id)).length})).filter(r=>r.val>0).sort((a,b)=>b.val-a.val);
+  const bigFamilies=Object.entries(PEOPLE.filter(p=>p.householdId).reduce((acc,p)=>{(acc[p.householdId]||=[]).push(p);return acc;},{})).map(([,m])=>m).sort((a,b)=>b.length-a.length).slice(0,10);
+
+  document.getElementById("content").innerHTML=`
+  <div class="grid">
+    <div class="card"><h2>Souls in the network</h2><div class="stat-big">${total}</div><div class="stat-label">${households} households · ${circleRows.length} circles</div></div>
+    <div class="card"><h2>Inner Circle</h2><div class="stat-big" style="color:var(--danger)">${inner}</div><div class="stat-label">Dunbar's dearest five</div></div>
+    <div class="card"><h2>Sympathy Group</h2><div class="stat-big" style="color:var(--warning)">${sympathy}</div><div class="stat-label">People you'd ring on a bad day</div></div>
+    <div class="card"><h2>Active Network</h2><div class="stat-big" style="color:var(--accent)">${active}</div><div class="stat-label">Neighbours, school, parish</div></div>
+    <div class="card wide"><h2>Dunbar's tiers</h2>${barChart([{label:"Inner Circle (5)",val:inner,colour:"#df2f4a"},{label:"Sympathy Group (15)",val:sympathy,colour:"#fdab3d"},{label:"Active Network (50)",val:active,colour:"#4eccc6"},{label:"Extended (150)",val:extended,colour:"#579bfc"}],150)}</div>
+    <div class="card"><h2>Profile completeness</h2><div class="stat-big">${pct}<span style="font-size:20px;color:var(--muted)">%</span></div><div class="stat-label">${withPhoto} photos · ${withBday} birthdays · ${withAnn} anniversaries</div><div class="progress"><div class="progress-fill" style="width:${pct}%;background:var(--accent)"></div></div></div>
+  </div>
+  <div class="grid">
+    <div class="card wide"><h2 class="row-link" data-gototab="circles" title="Open the editable Circles tab">Circles by membership ›</h2>${barChart(circleRows)}</div>
+    <div class="card"><h2>Quick links</h2><div class="quick-links">
+      <a class="quick-link" href="https://rezet-global.monday.com/boards/18408024949" target="_blank"><div class="quick-link-name">TJ Contacts</div><div class="quick-link-meta">${total} people</div></a>
+      <a class="quick-link" href="https://rezet-global.monday.com/boards/18415541970" target="_blank"><div class="quick-link-name">TJ Circles</div><div class="quick-link-meta">${circleRows.length} circles</div></a>
+      <a class="quick-link" href="https://rezet-global.monday.com/boards/18415541971" target="_blank"><div class="quick-link-name">TJ Interactions</div><div class="quick-link-meta">Encounters log</div></a>
+      <a class="quick-link" href="https://rezet-global.monday.com/boards/18415541972" target="_blank"><div class="quick-link-name">TJ Families</div><div class="quick-link-meta">${households} households</div></a>
+      <a class="quick-link" href="https://rezet-global.monday.com/boards/18415541973" target="_blank"><div class="quick-link-name">TJ Occasions</div><div class="quick-link-meta">Events & gifts</div></a>
+    </div></div>
+  </div>
+  <div class="grid">
+    <div class="card wide"><h2>Largest households</h2><table><thead><tr><th>Family</th><th>Members</th><th>Circle</th></tr></thead><tbody>
+      ${bigFamilies.map(m=>`<tr><td><strong class="row-link" data-pid="${m[0].id}">${m[0].household}</strong></td><td>${m.length} — ${m.map(x=>`<span class="row-link" data-pid="${x.id}">${x.name.split(" ").slice(-1)[0]}</span>`).join(", ")}</td><td><span class="pill" style="background:${m[0].circle.colour}22;color:${m[0].circle.colour}">${m[0].circle.label}</span></td></tr>`).join("")}
+    </tbody></table></div>
+  </div>`;
+}
+
+function renderCalendar(){
+  const months=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const withBday=PEOPLE.filter(p=>p.birthday);
+  if(!withBday.length){
+    document.getElementById("content").innerHTML=`<div class="card"><h2>Upcoming birthdays</h2><div class="empty">No birthdays recorded yet.<br><br>Open <a href="https://rezet-global.monday.com/boards/${CONTACTS_BOARD}" target="_blank">TJ Contacts</a> and fill in the <strong>BirthDay</strong> column.<br>Then regenerate these files.</div></div>`;
+    return;
+  }
+  const byMonth={};
+  for(let i=0;i<=12;i++){const d=new Date(TODAY);d.setMonth(d.getMonth()+i);byMonth[`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`]=[];}
+  withBday.forEach(p=>{
+    const[,mm,dd]=p.birthday.split("-");
+    const a=new Date(`2026-${mm}-${dd}`),b=new Date(`2027-${mm}-${dd}`);
+    const next=a>=TODAY?a:b;
+    const key=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,"0")}`;
+    if(byMonth[key]!==undefined)byMonth[key].push({...p,nextBday:next,day:parseInt(dd)});
+  });
+  const html=Object.entries(byMonth).filter(([,ppl])=>ppl.length).map(([key,ppl])=>{
+    const[y,m]=key.split("-");
+    return`<div class="card"><h2>${months[parseInt(m)-1]} ${y}</h2>${ppl.sort((a,b)=>a.day-b.day).map(p=>{
+      const days=Math.ceil((p.nextBday-TODAY)/86400000);
+      return`<div class="bday-row">${avatar(p)}<div><div style="font-weight:600"><span class="row-link" data-pid="${p.id}">${p.name}</span>${days<=14?`<span class="bday-soon">in ${days}d</span>`:""}</div><div style="font-size:11px;color:var(--muted)">${p.day} ${months[parseInt(m)-1]} · ${p.circle.label}</div></div></div>`;
+    }).join("")}</div>`;
+  }).join("");
+  document.getElementById("content").innerHTML=`<div class="grid">${html}</div>`;
+}
+
+function renderAnniversaries(){
+  const withAnn=PEOPLE.filter(p=>p.anniversary);
+  if(!withAnn.length){
+    document.getElementById("content").innerHTML=`<div class="card"><h2>Anniversaries</h2><div class="empty">No anniversaries recorded yet.<br><br>Fill the <strong>Anniversary</strong> column in <a href="https://rezet-global.monday.com/boards/${CONTACTS_BOARD}" target="_blank">TJ Contacts</a>, then regenerate.</div></div>`;
+    return;
+  }
+  // Dedupe couples: if two partners share the same anniversary date, show once as a pair.
+  const seen=new Set(), entries=[];
+  const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
+  withAnn.forEach(p=>{
+    if(seen.has(p.id))return;
+    const partner=p.partnerId?byId[p.partnerId]:null;
+    let label=p.name;
+    if(partner && partner.anniversary===p.anniversary){ seen.add(partner.id); label=`${p.name.split(" ").slice(-1)[0]} & ${partner.name.split(" ").slice(-1)[0]} ${p.name.split(" ")[0]}`; }
+    seen.add(p.id);
+    entries.push({...p, _label:label});
+  });
+  const byMonth={};
+  for(let i=0;i<=12;i++){const d=new Date(TODAY);d.setMonth(d.getMonth()+i);byMonth[`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`]=[];}
+  entries.forEach(p=>{
+    const[yy,mm,dd]=p.anniversary.split("-");
+    const a=new Date(`${TODAY.getFullYear()}-${mm}-${dd}`),b=new Date(`${TODAY.getFullYear()+1}-${mm}-${dd}`);
+    const next=a>=TODAY?a:b;
+    const key=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,"0")}`;
+    const yrs=(parseInt(yy) && parseInt(yy)<TODAY.getFullYear())? next.getFullYear()-parseInt(yy) : null;
+    if(byMonth[key]!==undefined)byMonth[key].push({...p,nextAnn:next,day:parseInt(dd),yrs});
+  });
+  const html=Object.entries(byMonth).filter(([,ppl])=>ppl.length).map(([key,ppl])=>{
+    const[y,m]=key.split("-");
+    return`<div class="card"><h2>${MONTHS[parseInt(m)-1]} ${y}</h2>${ppl.sort((a,b)=>a.day-b.day).map(p=>{
+      const days=Math.ceil((p.nextAnn-TODAY)/86400000);
+      return`<div class="bday-row">${avatar(p)}<div><div style="font-weight:600">💍 <span class="row-link" data-pid="${p.id}">${p._label}</span>${p.yrs!=null?` <span style="color:var(--accent);font-size:11px">${p.yrs} yrs</span>`:""}${days<=14?`<span class="bday-soon">in ${days}d</span>`:""}</div><div style="font-size:11px;color:var(--muted)">${p.day} ${MONTHS[parseInt(m)-1]} · ${p.circle.label}</div></div></div>`;
+    }).join("")}</div>`;
+  }).join("");
+  document.getElementById("content").innerHTML=`<div class="grid">${html}</div>`;
+}
+
+function renderHealth(){
+  const sorted=[...PEOPLE].sort((a,b)=>a.closeness.tier-b.closeness.tier);
+  function familyCell(p){
+    const t=getFamilyTree(p),parts=[];
+    if(t.grandparents.length)parts.push(`<span style="color:var(--muted)">👴 ${t.grandparents.map(x=>x.name.split(" ").slice(-1)[0]).join(", ")}</span>`);
+    if(t.parents.length)parts.push(`👨‍👩 ${t.parents.map(x=>x.name.split(" ").slice(-1)[0]).join(" + ")}`);
+    if(t.children.length)parts.push(`👶 ${t.children.map(x=>x.name.split(" ").slice(-1)[0]).join(", ")}`);
+    if(t.grandchildren.length)parts.push(`🧒 ${t.grandchildren.map(x=>x.name.split(" ").slice(-1)[0]).join(", ")}`);
+    return parts.length?`<div style="font-size:11px;line-height:1.7">${parts.join("<br>")}</div>`:`<span style="color:var(--muted)">—</span>`;
+  }
+  document.getElementById("content").innerHTML=`<div class="grid"><div class="card wide"><h2>All ${PEOPLE.length} people — Dunbar priority order</h2><table>
+    <thead><tr><th></th><th>Name</th><th>Role</th><th>Closeness</th><th>Circle</th><th>Family</th></tr></thead>
+    <tbody>${sorted.map(p=>`<tr>
+      <td>${avatar(p)}</td>
+      <td><span class="row-link" data-pid="${p.id}"><strong>${p.name}</strong></span>${p.household?`<div style="font-size:11px;color:var(--muted)">${p.household}</div>`:""}</td>
+      <td><span style="color:var(--muted);font-size:12px">${p.role||"—"}</span></td>
+      <td><span class="pill" style="background:${tierColour(p.closeness.tier)}22;color:${tierColour(p.closeness.tier)}">${p.closeness.label}</span></td>
+      <td><span class="pill" style="background:${p.circle.colour}22;color:${p.circle.colour}">${p.circle.label}</span></td>
+      <td>${familyCell(p)}</td>
+    </tr>`).join("")}</tbody>
+  </table></div></div>`;
+}
+
+function renderCircles(){
+  const html=CIRCLE_DEFS.map(c=>{
+    const m=PEOPLE.filter(p=>(p.circleIds||[]).includes(c.id));
+    return`<div class="card"><h2><span class="legend-dot" style="background:${c.colour}"></span>${c.label}
+        <button class="btn-add" data-addto="${c.id}" title="Add a member">＋</button>
+        <button class="btn-add" data-delcircle="${c.id}" data-label="${esc(c.label)}" title="Delete this circle" style="float:right;border-color:var(--danger);color:#ff8a9c">🗑</button></h2>
+      <div style="font-size:24px;font-weight:600;margin-bottom:10px">${m.length} <span style="font-size:13px;color:var(--muted);font-weight:400">people</span></div>
+      <table><tbody>${m.map(p=>`<tr><td style="width:42px">${avatar(p)}</td><td>
+        <span class="row-link" data-pid="${p.id}"><strong>${p.name}</strong></span>
+        ${p.household?`<div style="font-size:11px;color:var(--muted)">${p.household}${p.role?` · ${p.role}`:""}</div>`:""}
+      </td><td style="text-align:right;width:24px"><span class="chip-x" data-rm="${p.id}" data-cid="${c.id}" title="Remove from ${esc(c.label)}">×</span></td></tr>`).join("")||`<tr><td colspan="3" style="color:var(--muted);font-size:12px">No members yet — tap ＋.</td></tr>`}</tbody></table>
+    </div>`;
+  }).join("");
+  document.getElementById("content").innerHTML=`<div style="margin-bottom:12px"><button class="tab" id="new-circle-btn" style="border:1px solid var(--accent);color:var(--accent)">＋ New circle</button></div><div class="grid">${html}</div>`;
+  const C=document.getElementById("content");
+  C.querySelectorAll("[data-addto]").forEach(b=>b.addEventListener("click",()=>{const cid=b.dataset.addto;openContactPicker({title:`Add a member to ${(CIRCLE_MAP[cid]||{}).label||"circle"}`,excludeIds:PEOPLE.filter(p=>(p.circleIds||[]).includes(cid)).map(p=>p.id),onPick:id=>addCircleToContact(id,cid)});}));
+  C.querySelectorAll("[data-rm]").forEach(x=>x.addEventListener("click",()=>removeCircleFromContact(Number(x.dataset.rm),x.dataset.cid)));
+  C.querySelectorAll("[data-delcircle]").forEach(b=>b.addEventListener("click",()=>deleteCircleItem(b.dataset.delcircle,b.dataset.label)));
+  document.getElementById("new-circle-btn").addEventListener("click",async()=>{const name=prompt("New circle name:");if(name&&name.trim()){try{await createCircle(name.trim());toast(`Created circle "${name.trim()}"`);renderCircles();}catch(err){toast("Couldn't create",true);console.warn(err);}}});
+}
+
+const TABS={overview:renderOverview,calendar:renderCalendar,anniversaries:renderAnniversaries,health:renderHealth,circles:renderCircles};
+let activeTab="overview";
+document.querySelectorAll(".tab").forEach(t=>{
+  t.addEventListener("click",()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    t.classList.add("active"); activeTab=t.dataset.tab; TABS[activeTab]();
+  });
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────
+document.getElementById("subtitle").textContent=`${PEOPLE.length} people · loading fresh data…`;
+document.getElementById("stamp").innerHTML=`Snapshot: <strong>${GENERATED_AT}</strong> <span id="refresh-status" style="color:var(--muted)">· fetching…</span>`;
+TABS[activeTab]();
+
+// ── DATA: Supabase backend (replaces the old Monday auto-refresh) ─────
+const SUPA = { url:"https://jyrmfnrusrnhekksitkm.supabase.co", key:"sb_publishable_X-IX9YB14zm9rSUanq0b7w_n28vb06W" };
+let AUTH_TOKEN=null;
+const sbH = ()=>({apikey:SUPA.key, Authorization:"Bearer "+(AUTH_TOKEN||SUPA.key), "Content-Type":"application/json"});
+async function sbGet(path){ const r=await fetch(`${SUPA.url}/rest/v1/${path}`,{headers:sbH()}); if(!r.ok)throw new Error("GET "+path+" "+r.status); return r.json(); }
+async function sbPatch(table,col,val,body){ const r=await fetch(`${SUPA.url}/rest/v1/${table}?${col}=eq.${val}`,{method:"PATCH",headers:{...sbH(),Prefer:"return=minimal"},body:JSON.stringify(body)}); if(!r.ok)throw new Error("PATCH "+(await r.text())); }
+async function sbInsert(table,rows,prefer){ const r=await fetch(`${SUPA.url}/rest/v1/${table}`,{method:"POST",headers:{...sbH(),Prefer:prefer||"return=minimal"},body:JSON.stringify(rows)}); if(!r.ok)throw new Error("POST "+(await r.text())); }
+async function sbDelete(table,query){ const r=await fetch(`${SUPA.url}/rest/v1/${table}?${query}`,{method:"DELETE",headers:sbH()}); if(!r.ok)throw new Error("DELETE "+(await r.text())); }
+const ROLE_LABELS=["Parent","Child","Single","Priest / Religious","Other"];
+const M2S={ "text_mm3v9dpn":"nickname","text_mm4rgpf":"maiden_name","text_mm3vfnew":"how_we_met",
+ "text_mm3vvqwm":"children_notes","text_mm3vyn85":"pets","text_mm3v898a":"dietary",
+ "long_text_mm3vp521":"pinned_notes","long_text_mm3vwd7g":"story","long_text_mm3vtdth":"gift_ideas",
+ "long_text_mm4r2eg1":"how_to_approach","long_text_mm4rcs0j":"group_activity",
+ "date_mm03gvpg":"birthday","date_mm4rwpfj":"anniversary",
+ "color_mm3vy03m":"role","color_mm3vq7cr":"country","color_mm4rv9qa":"country2","color_mm4r6e3g":"country3",
+ "color_mm3vfjet":"religion","color_mm3vfwnv":"school","color_mm3vgj62":"school_year","color_mm3vqpx1":"class_kid",
+ "color_mm3v2ch5":"__closeness__","numeric_mm3wz3fb":"age","phone":"phone","email":"email","name":"name" };
+function m2sVal(v){
+  if(typeof v==="string") return v||null;
+  if(v && typeof v==="object"){
+    if(Object.keys(v).length===0) return null;
+    if(v.date!==undefined) return v.date||null;
+    if(v.text!==undefined) return v.text||null;
+    if(v.label!==undefined) return v.label||null;
+    if(v.index!==undefined) return ROLE_LABELS[v.index]||null;
+    if(v.phone!==undefined) return v.phone||null;
+    if(v.email!==undefined) return v.email||null;
+  }
+  return v==null?null:v;
+}
+// Old setters still call mondayWrite(id, mondayShapedPayload); translate it to a Supabase PATCH on contacts.
+async function mondayWrite(itemId, columnValues){
+  const patch={};
+  for(const [cid,val] of Object.entries(columnValues)){
+    const col=M2S[cid]; if(!col) continue;
+    if(col==="__closeness__"){ const lbl=(val&&val.label)||null; const m=(lbl||"").match(/\((\d+)\)/);
+      patch.closeness_label=lbl?lbl.split(" (")[0]:null; patch.closeness_tier=m?parseInt(m[1]):null; }
+    else if(col==="age"){ const x=m2sVal(val); patch.age=(x!==null&&x!=="")?parseInt(x):null; }
+    else if(col==="name"){ patch.name=val; }
+    else patch[col]=m2sVal(val);
+  }
+  await sbPatch("contacts","id",itemId,patch); return {id:itemId};
+}
+
+async function liveRefresh(){
+  const rs=document.getElementById("refresh-status"), btn=document.getElementById("refresh-btn");
+  if(rs){ rs.textContent="· loading…"; rs.style.color="var(--accent)"; }
+  if(btn){ btn.textContent="↻ Loading…"; btn.disabled=true; }
+  try{
+    const [contacts,circles,families,cc,pc,fwk]=await Promise.all([
+      sbGet("contacts?select=*"), sbGet("circles?select=*"), sbGet("families?select=*"),
+      sbGet("contact_circles?select=contact_id,circle_id"),
+      sbGet("parent_child?select=parent_id,child_id"),
+      sbGet("friends_with_kids?select=contact_id,kid_id") ]);
+    circles.forEach(c=>{ const id=String(c.id);
+      if(!CIRCLE_MAP[id]){ const def={id,label:c.name,colour:c.colour||"#5a6270"}; CIRCLE_DEFS.push(def); CIRCLE_MAP[id]=def; }
+      else { CIRCLE_MAP[id].label=c.name; if(c.colour)CIRCLE_MAP[id].colour=c.colour; } });
+    const fam=Object.fromEntries(families.map(f=>[f.id,f.name]));
+    const circOf={}; cc.forEach(r=>{ (circOf[r.contact_id]=circOf[r.contact_id]||[]).push(String(r.circle_id)); });
+    const kidsOf={}, parsOf={}; pc.forEach(r=>{ (kidsOf[r.parent_id]=kidsOf[r.parent_id]||[]).push(r.child_id); (parsOf[r.child_id]=parsOf[r.child_id]||[]).push(r.parent_id); });
+    const fkOf={}; fwk.forEach(r=>{ (fkOf[r.contact_id]=fkOf[r.contact_id]||[]).push(r.kid_id); });
+    const fresh=contacts.map(c=>{
+      const circleIds=circOf[c.id]||[]; const primary=CIRCLE_DEFS.find(d=>circleIds.includes(d.id))||FALLBACK;
+      return { id:c.id, name:c.name, group:null, photo:c.photo_url||null,
+        household:c.household_id?fam[c.household_id]||null:null, householdId:c.household_id||null,
+        partnerId:c.partner_id||null, circleIds, parentIds:parsOf[c.id]||[], childrenIds:kidsOf[c.id]||[], friendsKidsIds:fkOf[c.id]||[],
+        role:c.role, birthday:c.birthday, anniversary:c.anniversary, age:c.age,
+        circle:primary, closeness:{tier:c.closeness_tier||150, label:c.closeness_label||"Extended"},
+        nickname:c.nickname, maidenName:c.maiden_name, howWeMet:c.how_we_met, pinnedNotes:c.pinned_notes,
+        giftIdeas:c.gift_ideas, story:c.story, howToApproach:c.how_to_approach, groupActivity:c.group_activity,
+        childrenNotes:c.children_notes, pets:c.pets, dietary:c.dietary, tags:[],
+        phone:c.phone, email:c.email, location:c.address,
+        school:c.school, schoolYear:c.school_year, classKid:c.class_kid,
+        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion };
+    });
+    const byId=Object.fromEntries(fresh.map(p=>[p.id,p]));
+    for(const p of fresh){ if(p.partnerId&&byId[p.partnerId]){ const q=byId[p.partnerId]; const best=Math.min(p.closeness.tier,q.closeness.tier); const lbl=p.closeness.tier===best?p.closeness.label:q.closeness.label; p.closeness=q.closeness={tier:best,label:lbl}; } }
+    PEOPLE.length=0; fresh.forEach(p=>PEOPLE.push(p));
+    document.getElementById("subtitle").textContent=`${PEOPLE.length} people · Supabase`;
+    if(rs){ rs.textContent=`· live ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`; rs.style.color="var(--muted)"; }
+    if(TABS[activeTab])TABS[activeTab]();
+  }catch(err){ if(rs){ rs.textContent="· load failed (kept current)"; rs.style.color="var(--muted)"; } console.warn("Supabase load failed:",err); }
+  finally{ if(btn){ btn.textContent="↻ Refresh"; btn.disabled=false; } }
+}
+document.getElementById("refresh-btn").addEventListener("click", liveRefresh);
+
+// ══ INTERACTIVE PERSON CARD + EDITORS (write-back to Monday) ═══════════
+const CIRCLE_MAP=Object.fromEntries(CIRCLE_DEFS.map(c=>[c.id,c]));
+const FALLBACK={id:"__none__",label:"Wider Circle",colour:"#5a6270"};
+const NATION_LABELS=["Argentina","Australia","Chile","Colombia","Cuba","El Salvador","Germany","Italy","Japan","Lebanon","Malaysia","Netherlands","New Zealand","Nigeria","Other","Philippines","South Africa","Vietnam"];
+const TEXTCOL_FIELD={ "text_mm3v9dpn":"nickname","text_mm4rgpf":"maidenName","text_mm3vfnew":"howWeMet","text_mm3vvqwm":"childrenNotes","text_mm3vyn85":"pets","text_mm3v898a":"dietary","long_text_mm3vp521":"pinnedNotes","long_text_mm3vwd7g":"story","long_text_mm3vtdth":"giftIdeas","long_text_mm4r2eg1":"howToApproach","long_text_mm4rcs0j":"groupActivity" };
+const STATUS_OPTS={
+ "color_mm3vy03m":["Parent","Child","Single","Priest / Religious","Other"],
+ "color_mm3v2ch5":["Inner Circle (5)","Sympathy Group (15)","Active Network (50)","Extended (150)","Acquaintance"],
+ "color_mm3vfjet":["Numerary (Opus Dei)","Supernumerary (Opus Dei)","Cooperator (Opus Dei)","Practising Catholic","Lapsed Catholic","Other Christian","Other","None"],
+ "color_mm3vfwnv":["HHC (Harkaway Hills College)","Other Catholic School","State School","Independent School","Pre-school","University","None / Adult"],
+ "color_mm3vgj62":["Pre-Prep","Prep","Year 1","Year 2","Year 3","Year 4","Year 5","Year 6","Year 7","Year 8","Year 9","Year 10","Year 11","Year 12"],
+ "color_mm3vqpx1":["Sophia's class","Augusto's class","Both","Sibling of friend","Same school, other year","Different school"] };
+const STATUS_FIELD={ "color_mm3vy03m":"role","color_mm3vfjet":"religion","color_mm3vfwnv":"school","color_mm3vgj62":"schoolYear","color_mm3vqpx1":"classKid" };
+const CIRCLE_PALETTE=["#ff5ca0","#5ad1ff","#ffd34e","#7bd88f","#b388ff","#ff8a65","#4dd0e1","#f06292","#aed581","#ba68c8","#ffb74d","#4fc3f7"];
+const _MONS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const _TA='width:100%;min-height:120px;padding:8px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit';
+const _IN='width:100%;padding:8px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px';
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");}
+function fmtDate(s){ if(!s)return ""; const [y,m,d]=s.split("-").map(Number); const dm=`${d} ${_MONS[m-1]}`; return (y&&y<new Date().getFullYear())?`${dm} ${y}`:dm; }
+function annYears(s){ if(!s)return null; const y=parseInt(s.slice(0,4)); return (y&&y<new Date().getFullYear())?new Date().getFullYear()-y:null; }
+function ageOf(p){ if(p.birthday){ const y=parseInt(p.birthday.slice(0,4)); if(y&&y<new Date().getFullYear()){ const b=new Date(p.birthday),n=new Date(); let a=n.getFullYear()-b.getFullYear(); const m=n.getMonth()-b.getMonth(); if(m<0||(m===0&&n.getDate()<b.getDate()))a--; return a; } } return (p.age!=null&&p.age!=="")?p.age:null; }
+
+let currentPerson=null;
+function closeCard(){ currentPerson=null; document.getElementById("card-root").innerHTML=""; }
+function afterEdit(person){ if(TABS[activeTab])TABS[activeTab](); if(currentPerson&&person&&currentPerson.id===person.id)showCard(person); }
+// Delegated clicks: ANY [data-pid] opens the person card; [data-gototab] switches tab.
+document.getElementById("content").addEventListener("click",e=>{
+  const pl=e.target.closest("[data-pid]"); if(pl){ const p=PEOPLE.find(x=>x.id==pl.dataset.pid); if(p)showCard(p); return; }
+  const gt=e.target.closest("[data-gototab]"); if(gt){ const t=[...document.querySelectorAll('.tab')].find(x=>x.dataset.tab===gt.dataset.gototab); if(t)t.click(); }
+});
+
+function toast(msg,isErr){ let t=document.getElementById("toast"); if(!t){t=document.createElement("div");t.id="toast";document.body.appendChild(t);} t.textContent=msg; t.className="toast show"+(isErr?" err":""); clearTimeout(t._h); t._h=setTimeout(()=>{t.className="toast"+(isErr?" err":"");},2600); }
+
+function showCard(p){
+  currentPerson=p;
+  const byId=Object.fromEntries(PEOPLE.map(x=>[x.id,x]));
+  const partner=p.partnerId?byId[p.partnerId]:null;
+  const parents=(p.parentIds||[]).map(id=>byId[id]).filter(Boolean);
+  const children=PEOPLE.filter(x=>(x.parentIds||[]).includes(p.id));
+  const circlePills=(p.circleIds||[]).map(cid=>{const c=CIRCLE_MAP[cid]||{label:cid,colour:"#666"}; return `<span class="info-tag" style="border-color:${c.colour};color:${c.colour}">${c.label}<span class="chip-x" data-rmcircle="${cid}">×</span></span>`;}).join("");
+  const factRow=(icon,label,val,col,multi)=>`<div style="margin-top:4px">${icon} <strong>${label}:</strong> ${val?String(val).replace(/\n/g,"<br>"):`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-col="${col}" data-label="${label}" data-multi="${multi?1:0}">✎</span></div>`;
+  const genList=(title,arr,icon)=> arr.length?`<div class="info-section"><h3>${icon} ${title}</h3><ul class="info-list">${arr.map(x=>`<li data-id="${x.id}">${x.name}${x.role?` <span style="color:var(--muted);font-size:11px">· ${x.role}</span>`:""}</li>`).join("")}</ul></div>`:"";
+  const _nats=[p.country,p.country2,p.country3].filter(Boolean);
+  const statusRow=(label,val,col,fk)=>`<div style="margin-top:4px"><strong>${label}:</strong> ${val?val:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-status="${col}" data-fkey="${fk}" data-label="${label}">✎</span></div>`;
+  const detailsHTML=`<div class="info-section"><h3>Details</h3><div style="font-size:13px;line-height:1.6">
+    ${statusRow("Role",p.role,"color_mm3vy03m","role")}
+    ${statusRow("Closeness",p.closeness.label,"color_mm3v2ch5","__closeness__")}
+    ${statusRow("Religion / practice",p.religion,"color_mm3vfjet","religion")}
+    ${statusRow("School",p.school,"color_mm3vfwnv","school")}
+    ${statusRow("School year",p.schoolYear,"color_mm3vgj62","schoolYear")}
+    ${statusRow("Class with our kid",p.classKid,"color_mm3vqpx1","classKid")}
+    <div style="margin-top:4px">👰 <strong>Maiden name:</strong> ${p.maidenName?p.maidenName:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-col="text_mm4rgpf" data-label="Maiden name" data-multi="0">✎</span></div>
+    <div style="margin-top:4px"><strong>Age:</strong> ${(p.age!=null&&p.age!=="")?p.age:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-num="numeric_mm3wz3fb" data-label="Age">✎</span></div>
+    <div style="margin-top:4px">📞 ${p.phone?p.phone:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="phone" data-label="Phone">✎</span></div>
+    <div style="margin-top:4px">✉ ${p.email?p.email:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="email" data-label="Email">✎</span></div>
+    <div style="margin-top:4px">🏠 <strong>Household:</strong> ${p.household?p.household:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-household-btn">✎</span></div>
+  </div></div>`;
+  document.getElementById("card-root").innerHTML=`<div class="drawer-backdrop" id="card-bd"></div><div class="card-drawer"><span class="x-close" id="card-x">×</span>
+    <div class="info-photo">${p.photo?`<img src="${p.photo}" onerror="this.parentNode.innerHTML='👤'">`:"👤"}</div>
+    <div style="text-align:center;margin:2px 0 10px"><span class="edit-link" id="photo-btn">📷 ${p.photo?'Change':'Add'} photo</span></div>
+    <div class="info-name">${p.name} <span class="edit-link" id="edit-name-btn" title="Edit name" style="font-size:12px">✎</span>${ageOf(p)!=null?` <span style="color:var(--accent);font-size:15px">· ${ageOf(p)} yrs</span>`:""}${p.nickname?` <span style="color:var(--muted);font-size:14px;font-weight:400">("${p.nickname}")</span>`:""}</div>
+    <div class="info-meta">${[p.role,p.circle.label,p.closeness.label].filter(Boolean).join(" · ")}</div>
+    ${p.household?`<div class="info-meta" style="margin-top:-2px">🏠 ${p.household}</div>`:""}
+    <div class="info-section" style="border-top:none;padding-top:0"><h3>Belongs to <button class="btn-add" id="add-circle-btn">＋</button></h3><div class="info-tags">${circlePills||'<span style="color:var(--muted);font-size:12px">No circles yet — tap ＋</span>'}</div></div>
+    <div class="info-section"><h3>📖 Story <span class="edit-link" data-col="long_text_mm3vwd7g" data-label="Story" data-multi="1">✎</span></h3><div style="font-size:13px;line-height:1.6;white-space:pre-wrap">${p.story?p.story.replace(/\n/g,"<br>"):`<span style="color:var(--muted)">—</span>`}</div></div>
+    <div class="info-section"><h3>🧭 How to approach <span class="edit-link" data-col="long_text_mm4r2eg1" data-label="How to approach" data-multi="1">✎</span></h3><div style="font-size:13px;line-height:1.6;white-space:pre-wrap;color:#ecd9a6">${p.howToApproach?p.howToApproach.replace(/\n/g,"<br>"):`<span style="color:var(--muted)">—</span>`}</div></div>
+    <div class="info-section"><h3>💬 Group activity <span class="edit-link" data-col="long_text_mm4rcs0j" data-label="Group activity" data-multi="1">✎</span></h3><div style="font-size:12px;line-height:1.55;white-space:pre-wrap;color:var(--muted)">${p.groupActivity?p.groupActivity.replace(/\n/g,"<br>"):`<span style="color:var(--muted)">—</span>`}</div></div>
+    <div class="info-section"><h3>Facts</h3><div style="font-size:13px;line-height:1.6">
+      <div>🌍 <strong>Nationality:</strong> ${_nats.length?`<strong>${_nats.join(" · ")}</strong>`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-nat">✎</span></div>
+      ${factRow("🏷️","Nickname",p.nickname,"text_mm3v9dpn",0)}
+      ${factRow("🤝","How we met",p.howWeMet,"text_mm3vfnew",0)}
+      ${factRow("👶","Children notes",p.childrenNotes,"text_mm3vvqwm",0)}
+      ${factRow("🐾","Pets",p.pets,"text_mm3vyn85",0)}
+      ${factRow("🥗","Dietary",p.dietary,"text_mm3v898a",0)}
+      ${factRow("📌","Pinned",p.pinnedNotes,"long_text_mm3vp521",1)}
+      ${factRow("🎁","Gift ideas",p.giftIdeas,"long_text_mm3vtdth",1)}
+    </div></div>
+    ${detailsHTML}
+    ${genList("Parents",parents,"👨‍👩")}
+    <div class="info-section"><h3>💑 Partner <button class="btn-add" id="edit-partner-btn">${partner?'✎':'＋'}</button></h3>${partner?`<ul class="info-list"><li data-id="${partner.id}">${partner.name}</li></ul>`:`<span style="color:var(--muted);font-size:12px">No partner set</span>`}</div>
+    ${genList("Children",children,"👶")}
+    <div style="margin:2px 0 0"><span class="edit-link" id="add-child-btn">👶 ＋ Add a child</span></div>
+    <div class="info-section"><h3>📅 Important dates</h3>
+      <div>🎂 Birthday: ${p.birthday?`<strong>${fmtDate(p.birthday)}</strong>${ageOf(p)!=null?` · <span style="color:var(--accent)">${ageOf(p)} yrs</span>`:""}`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-bday">✎ edit</span></div>
+      <div style="margin-top:5px">💍 Anniversary: ${p.anniversary?`<strong>${fmtDate(p.anniversary)}</strong>${annYears(p.anniversary)!=null?` · <span style="color:var(--accent)">${annYears(p.anniversary)} yrs</span>`:""}`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-anniv">✎ edit</span></div>
+      <div style="margin-top:8px"><a href="https://rezet-global.monday.com/boards/${CONTACTS_BOARD}/pulses/${p.id}" target="_blank" style="font-size:12px">Open in Monday →</a></div>
+    </div></div>`;
+  const root=document.getElementById("card-root");
+  document.getElementById("card-bd").addEventListener("click",closeCard);
+  document.getElementById("card-x").addEventListener("click",closeCard);
+  root.querySelectorAll("li[data-id]").forEach(li=>li.addEventListener("click",()=>{const t=byId[li.dataset.id];if(t)showCard(t);}));
+  root.querySelectorAll("[data-rmcircle]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();removeCircleFromContact(p.id,x.dataset.rmcircle);}));
+  root.querySelectorAll("[data-col]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();editText(p,x.dataset.col,x.dataset.label,x.dataset.multi==="1");}));
+  root.querySelectorAll("[data-status]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();editStatus(p,x.dataset.status,x.dataset.fkey,x.dataset.label);}));
+  root.querySelectorAll("[data-num]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();editNumber(p,x.dataset.num,x.dataset.label);}));
+  root.querySelectorAll("[data-contact]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();editContact(p,x.dataset.contact,x.dataset.label);}));
+  const g=id=>document.getElementById(id);
+  g("edit-name-btn").addEventListener("click",()=>editName(p));
+  g("edit-household-btn").addEventListener("click",()=>editHousehold(p));
+  g("add-circle-btn").addEventListener("click",()=>openCirclePicker(p));
+  g("edit-nat").addEventListener("click",()=>editNationality(p));
+  g("photo-btn").addEventListener("click",()=>pickPhoto(p));
+  g("edit-partner-btn").addEventListener("click",()=>openContactPicker({title:`Set ${p.name}'s partner`,excludeIds:[p.id],onPick:id=>setPartner(p.id,id)}));
+  g("add-child-btn").addEventListener("click",()=>openContactPicker({title:`Add a child to ${p.name}`,excludeIds:[p.id,...(p.childrenIds||[])],onPick:id=>addChild(p.id,id)}));
+  g("edit-bday").addEventListener("click",()=>editDate(p,"date_mm03gvpg",p.birthday));
+  g("edit-anniv").addEventListener("click",()=>editDate(p,"date_mm4rwpfj",p.anniversary));
+}
+
+// Pickers
+function openContactPicker({title,excludeIds=[],onPick}){
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  const ex=new Set(excludeIds.map(Number));
+  const pool=PEOPLE.filter(p=>!ex.has(p.id)).sort((a,b)=>a.name.localeCompare(b.name));
+  ov.innerHTML=`<div class="picker"><div class="picker-head"><h3>${title}</h3><input type="search" placeholder="Search a name…" id="pk-s"></div><div class="picker-list" id="pk-l"></div><div class="picker-foot"><button class="tab" id="pk-x">Close</button></div></div>`;
+  document.body.appendChild(ov);
+  const list=ov.querySelector("#pk-l"), s=ov.querySelector("#pk-s");
+  function draw(q){ const f=q?pool.filter(p=>(p.name+" "+(p.nickname||"")).toLowerCase().includes(q.toLowerCase())):pool;
+    list.innerHTML=f.slice(0,80).map(p=>`<div class="picker-item" data-id="${p.id}"><span class="pi-dot" style="background:${p.circle.colour}"></span><span>${p.name}</span><span class="pi-sub">${p.household||p.role||""}</span></div>`).join("")||`<div style="padding:14px;color:var(--muted)">No matches.</div>`;
+    list.querySelectorAll(".picker-item").forEach(it=>it.addEventListener("click",async()=>{ov.remove();await onPick(Number(it.dataset.id));}));
+  }
+  s.addEventListener("input",()=>draw(s.value)); ov.querySelector("#pk-x").addEventListener("click",()=>ov.remove());
+  ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();}); draw(""); s.focus();
+}
+function openCirclePicker(person){
+  const inIds=new Set((person.circleIds||[]).map(String));
+  const avail=CIRCLE_DEFS.filter(c=>!inIds.has(c.id));
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker"><div class="picker-head"><h3>Add ${person.name} to a circle</h3><input type="search" placeholder="Filter, or type a new circle name…" id="cp-s"></div><div class="picker-list" id="cp-l"></div><div class="picker-foot"><button class="tab" id="cp-x">Close</button></div></div>`;
+  document.body.appendChild(ov);
+  const l=ov.querySelector("#cp-l"), s=ov.querySelector("#cp-s");
+  function draw(q){ const qt=q.trim();
+    const f=qt?avail.filter(c=>c.label.toLowerCase().includes(qt.toLowerCase())):avail;
+    let html=f.map(c=>`<div class="picker-item" data-cid="${c.id}"><span class="pi-dot" style="background:${c.colour}"></span><span>${c.label}</span></div>`).join("");
+    const exact=CIRCLE_DEFS.some(c=>c.label.toLowerCase()===qt.toLowerCase());
+    if(qt&&!exact) html+=`<div class="picker-item" data-create="${esc(qt)}"><span class="pi-dot" style="background:var(--accent)"></span><span>＋ Create "<strong>${esc(qt)}</strong>" as a new circle</span></div>`;
+    l.innerHTML=html||`<div style="padding:14px;color:var(--muted)">Type a name to create a new circle.</div>`;
+    l.querySelectorAll(".picker-item[data-cid]").forEach(it=>it.addEventListener("click",async()=>{ov.remove();await addCircleToContact(person.id,it.dataset.cid);}));
+    const cr=l.querySelector(".picker-item[data-create]");
+    if(cr) cr.addEventListener("click",async()=>{ov.remove();try{const def=await createCircle(cr.dataset.create);await addCircleToContact(person.id,def.id);}catch(err){toast("Couldn't create circle",true);console.warn(err);}});
+  }
+  s.addEventListener("input",()=>draw(s.value)); ov.querySelector("#cp-x").addEventListener("click",()=>ov.remove());
+  ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();}); draw(""); s.focus();
+}
+
+// Write-back ops
+async function addCircleToContact(contactId,circleId){
+  const p=PEOPLE.find(x=>x.id===contactId); if(!p)return;
+  try{
+    await sbInsert("contact_circles",[{contact_id:contactId,circle_id:Number(circleId)}],"resolution=ignore-duplicates,return=minimal");
+    p.circleIds=[...new Set([...(p.circleIds||[]).map(String),String(circleId)])]; p.circle=CIRCLE_DEFS.find(c=>p.circleIds.includes(c.id))||FALLBACK;
+    toast(`Added ${p.name} to ${(CIRCLE_MAP[String(circleId)]||{}).label||"circle"}`); afterEdit(p);
+  }catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+async function removeCircleFromContact(contactId,circleId){
+  const p=PEOPLE.find(x=>x.id===contactId); if(!p)return;
+  try{
+    await sbDelete("contact_circles",`contact_id=eq.${contactId}&circle_id=eq.${Number(circleId)}`);
+    p.circleIds=(p.circleIds||[]).map(String).filter(id=>id!==String(circleId)); p.circle=CIRCLE_DEFS.find(c=>p.circleIds.includes(c.id))||FALLBACK;
+    toast(`Removed ${p.name} from circle`); afterEdit(p);
+  }catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+async function setContactDate(contactId,columnId,value){
+  const p=PEOPLE.find(x=>x.id===contactId); if(!p)return;
+  try{ await mondayWrite(contactId,{[columnId]:value?{date:value}:{}}); if(columnId==="date_mm03gvpg")p.birthday=value||null; if(columnId==="date_mm4rwpfj")p.anniversary=value||null; toast("Saved ✓"); afterEdit(p); }
+  catch(err){ toast("Couldn't save to Monday",true); console.warn(err); }
+}
+function editDate(person,columnId,currentVal){
+  const ov=document.createElement("div"); ov.className="picker-overlay"; const isBd=columnId==="date_mm03gvpg";
+  ov.innerHTML=`<div class="picker" style="width:300px"><div class="picker-head"><h3>${isBd?"🎂 Birthday":"💍 Anniversary"} — ${person.name}</h3><input type="date" id="d-in" value="${currentVal||""}"></div><div class="picker-foot"><button class="tab" id="d-clear" style="float:left">Clear</button><button class="tab" id="d-cancel">Cancel</button> <button class="tab" id="d-save" style="border:1px solid var(--accent);color:var(--accent)">Save</button></div></div>`;
+  document.body.appendChild(ov); const inp=ov.querySelector("#d-in");
+  ov.querySelector("#d-save").addEventListener("click",async()=>{ov.remove();await setContactDate(person.id,columnId,inp.value||null);});
+  ov.querySelector("#d-clear").addEventListener("click",async()=>{ov.remove();await setContactDate(person.id,columnId,null);});
+  ov.querySelector("#d-cancel").addEventListener("click",()=>ov.remove()); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();}); inp.focus();
+}
+async function setNationality(contactId,primary,second,third){
+  const p=PEOPLE.find(x=>x.id===contactId); if(!p)return;
+  const vals={"color_mm3vq7cr":primary?{label:primary}:{},"color_mm4rv9qa":second?{label:second}:{},"color_mm4r6e3g":third?{label:third}:{}};
+  try{ await mondayWrite(contactId,vals,",create_labels_if_missing:true"); p.country=primary||null; p.country2=second||null; p.country3=third||null; toast("Saved ✓"); afterEdit(p); }
+  catch(err){ toast("Couldn't save to Monday",true); console.warn(err); }
+}
+function editNationality(person){
+  const opts=v=>NATION_LABELS.map(l=>`<option value="${l}" ${v===l?"selected":""}>${l}</option>`).join("");
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:320px"><div class="picker-head"><h3>🌍 Nationality — ${person.name}</h3><div style="font-size:12px;color:var(--muted);margin:4px 0">Primary</div><select id="nat1"><option value="">—</option>${opts(person.country)}</select><div style="font-size:12px;color:var(--muted);margin:8px 0 4px">Second (dual)</div><select id="nat2"><option value="">—</option>${opts(person.country2)}</select><div style="font-size:12px;color:var(--muted);margin:8px 0 4px">Third</div><select id="nat3"><option value="">—</option>${opts(person.country3)}</select></div><div class="picker-foot"><button class="tab" id="n-cancel">Cancel</button> <button class="tab" id="n-save" style="border:1px solid var(--accent);color:var(--accent)">Save</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector("#n-save").addEventListener("click",async()=>{const a=ov.querySelector("#nat1").value,b=ov.querySelector("#nat2").value,c=ov.querySelector("#nat3").value;ov.remove();await setNationality(person.id,a||null,b||null,c||null);});
+  ov.querySelector("#n-cancel").addEventListener("click",()=>ov.remove()); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+async function setText(person,columnId,value){
+  const field=TEXTCOL_FIELD[columnId], isLong=columnId.startsWith("long_text");
+  try{ await mondayWrite(person.id,{[columnId]:isLong?{text:value||""}:(value||"")}); if(field)person[field]=value||null; toast("Saved ✓"); afterEdit(person); }
+  catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+function editText(person,columnId,label,multiline){
+  const field=TEXTCOL_FIELD[columnId], cur=person[field]||"";
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  const input=multiline?`<textarea id="t-in" style="${_TA}">${esc(cur)}</textarea>`:`<input id="t-in" type="text" value="${esc(cur)}" style="${_IN}">`;
+  ov.innerHTML=`<div class="picker" style="width:380px"><div class="picker-head"><h3>${label} — ${person.name}</h3>${input}</div><div class="picker-foot"><button class="tab" id="t-cancel">Cancel</button> <button class="tab" id="t-save" style="border:1px solid var(--accent);color:var(--accent)">Save</button></div></div>`;
+  document.body.appendChild(ov); const inp=ov.querySelector("#t-in"); inp.focus();
+  ov.querySelector("#t-save").addEventListener("click",async()=>{const v=inp.value;ov.remove();await setText(person,columnId,v);});
+  ov.querySelector("#t-cancel").addEventListener("click",()=>ov.remove()); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+async function setPartner(personId,partnerId){
+  const p=PEOPLE.find(x=>x.id===personId),q=PEOPLE.find(x=>x.id===partnerId); if(!p||!q)return;
+  try{
+    await sbPatch("contacts","id",personId,{partner_id:partnerId});
+    await sbPatch("contacts","id",partnerId,{partner_id:personId});
+    p.partnerId=partnerId; q.partnerId=personId; toast(`Linked ${p.name} ❤ ${q.name}`); afterEdit(p);
+  }catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+async function addChild(parentId,childId){
+  const parent=PEOPLE.find(x=>x.id===parentId),child=PEOPLE.find(x=>x.id===childId); if(!parent||!child)return;
+  try{
+    await sbInsert("parent_child",[{parent_id:parentId,child_id:childId}],"resolution=ignore-duplicates,return=minimal");
+    child.parentIds=[...new Set([...(child.parentIds||[]),parentId])]; parent.childrenIds=[...new Set([...(parent.childrenIds||[]),childId])];
+    toast(`${child.name} is now a child of ${parent.name}`); afterEdit(parent);
+  }catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+function pickPhoto(person){ const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.onchange=()=>{if(inp.files&&inp.files[0])openCrop(person,inp.files[0]);}; inp.click(); }
+function openCrop(person,file){
+  const FRAME=280, OUT=480; const img=new Image();
+  img.onload=()=>{
+    const minScale=FRAME/Math.min(img.naturalWidth,img.naturalHeight);
+    let scale=minScale, tx=(FRAME-img.naturalWidth*scale)/2, ty=(FRAME-img.naturalHeight*scale)/2;
+    const ov=document.createElement("div"); ov.className="picker-overlay";
+    ov.innerHTML=`<div class="picker" style="width:320px"><div class="picker-head"><h3>Position the face — ${person.name}</h3></div>
+      <div style="padding:14px;display:flex;flex-direction:column;align-items:center;gap:10px">
+        <div id="crop-frame" style="width:${FRAME}px;height:${FRAME}px;border-radius:12px;overflow:hidden;position:relative;background:#000;cursor:grab;touch-action:none">
+          <img id="crop-img" src="${img.src}" draggable="false" style="position:absolute;left:0;top:0;transform-origin:0 0;user-select:none;-webkit-user-drag:none">
+          <div style="position:absolute;inset:0;pointer-events:none;border:2px dashed rgba(255,255,255,.4);border-radius:12px"></div>
+        </div>
+        <input id="crop-zoom" type="range" min="1" max="4" step="0.01" value="1" style="width:100%">
+        <div style="font-size:11px;color:var(--muted)">Drag to move · slider to zoom</div>
+      </div>
+      <div class="picker-foot"><button class="tab" id="crop-cancel">Cancel</button> <button class="tab" id="crop-save" style="border:1px solid var(--accent);color:var(--accent)">Save photo</button></div></div>`;
+    document.body.appendChild(ov);
+    const el=ov.querySelector("#crop-img"), frame=ov.querySelector("#crop-frame"), zoom=ov.querySelector("#crop-zoom");
+    function clamp(){ const w=img.naturalWidth*scale, h=img.naturalHeight*scale; if(tx>0)tx=0; if(ty>0)ty=0; if(tx<FRAME-w)tx=FRAME-w; if(ty<FRAME-h)ty=FRAME-h; }
+    function apply(){ el.style.width=(img.naturalWidth*scale)+"px"; el.style.height=(img.naturalHeight*scale)+"px"; el.style.transform=`translate(${tx}px,${ty}px)`; }
+    clamp(); apply();
+    let dragging=false, lx=0, ly=0;
+    frame.addEventListener("pointerdown",e=>{dragging=true;lx=e.clientX;ly=e.clientY;frame.setPointerCapture(e.pointerId);frame.style.cursor="grabbing";});
+    frame.addEventListener("pointermove",e=>{ if(!dragging)return; tx+=e.clientX-lx; ty+=e.clientY-ly; lx=e.clientX; ly=e.clientY; clamp(); apply(); });
+    frame.addEventListener("pointerup",()=>{dragging=false;frame.style.cursor="grab";});
+    zoom.addEventListener("input",()=>{ const ns=minScale*parseFloat(zoom.value), cx=FRAME/2, cy=FRAME/2; tx=cx-(cx-tx)*(ns/scale); ty=cy-(cy-ty)*(ns/scale); scale=ns; clamp(); apply(); });
+    ov.querySelector("#crop-cancel").addEventListener("click",()=>ov.remove());
+    ov.querySelector("#crop-save").addEventListener("click",()=>{
+      const c=document.createElement("canvas"); c.width=OUT; c.height=OUT; const ctx=c.getContext("2d");
+      ctx.drawImage(img, -tx/scale, -ty/scale, FRAME/scale, FRAME/scale, 0, 0, OUT, OUT);
+      c.toBlob(blob=>{ ov.remove(); if(blob) uploadPhoto(person, blob, (file.name||"photo").replace(/\.[^.]+$/,"")+".jpg"); }, "image/jpeg", 0.9);
+    });
+    ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+  };
+  img.onerror=()=>toast("Couldn't read that image",true);
+  img.src=URL.createObjectURL(file);
+}
+async function uploadPhoto(person,fileOrBlob,filename){
+  toast("Uploading photo…");
+  const isPng=(filename||"").toLowerCase().endsWith(".png")||(fileOrBlob.type==="image/png");
+  const path=`${person.id}-${Date.now()}.${isPng?"png":"jpg"}`;
+  try{
+    const r=await fetch(`${SUPA.url}/storage/v1/object/photos/${path}`,{method:"POST",
+      headers:{apikey:SUPA.key,Authorization:"Bearer "+(AUTH_TOKEN||SUPA.key),"Content-Type":fileOrBlob.type||"image/jpeg","x-upsert":"true"},
+      body:fileOrBlob});
+    if(!r.ok) throw new Error("storage "+(await r.text()));
+    const url=`${SUPA.url}/storage/v1/object/public/photos/${path}`;
+    await sbPatch("contacts","id",person.id,{photo_url:url});
+    person.photo=url; toast("Photo saved ✓"); afterEdit(person);
+  }catch(err){ try{ person.photo=URL.createObjectURL(fileOrBlob); afterEdit(person); }catch(e){} toast("Photo upload failed",true); console.warn(err); }
+}
+async function createCircle(name){
+  const id=Date.now();
+  const used=new Set(CIRCLE_DEFS.map(c=>c.colour));
+  const colour=CIRCLE_PALETTE.find(c=>!used.has(c)) || CIRCLE_PALETTE[CIRCLE_DEFS.length%CIRCLE_PALETTE.length];
+  await sbInsert("circles",[{id, name, colour}]);
+  const def={id:String(id),label:name,colour}; CIRCLE_DEFS.push(def); CIRCLE_MAP[def.id]=def; return def;
+}
+async function deleteCircleItem(circleId,label){
+  if(!confirm(`Delete the circle "${label}"? Members stay, they just lose this circle tag.`))return;
+  try{ await sbDelete("circles",`id=eq.${Number(circleId)}`);
+    PEOPLE.forEach(p=>{ if(p.circleIds)p.circleIds=p.circleIds.filter(id=>id!==String(circleId)); });
+    const i=CIRCLE_DEFS.findIndex(c=>c.id===String(circleId)); if(i>=0)CIRCLE_DEFS.splice(i,1); delete CIRCLE_MAP[String(circleId)];
+    toast(`Deleted circle "${label}"`); if(TABS[activeTab])TABS[activeTab]();
+  }catch(err){ toast("Couldn't delete",true); console.warn(err); }
+}
+// ── Name, status, number, contact, household editors ────────────────
+async function setName(person,newName){
+  if(!newName||!newName.trim())return;
+  try{ await mondayWrite(person.id,{name:newName.trim()}); person.name=newName.trim(); toast("Name updated ✓"); afterEdit(person); }
+  catch(err){ toast("Couldn't rename",true); console.warn(err); }
+}
+function editName(person){
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:360px"><div class="picker-head"><h3>Edit name</h3><input id="nm-in" type="text" value="${esc(person.name)}" style="${_IN}"><div style="font-size:11px;color:var(--muted);margin-top:6px">Format: Surname Firstname. Use the Maiden-name field for a née surname.</div></div><div class="picker-foot"><button class="tab" id="nm-cancel">Cancel</button> <button class="tab" id="nm-save" style="border:1px solid var(--accent);color:var(--accent)">Save</button></div></div>`;
+  document.body.appendChild(ov); const inp=ov.querySelector("#nm-in"); inp.focus(); inp.select();
+  ov.querySelector("#nm-save").addEventListener("click",async()=>{const v=inp.value;ov.remove();await setName(person,v);});
+  ov.querySelector("#nm-cancel").addEventListener("click",()=>ov.remove()); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+async function setStatus(person,columnId,fkey,label){
+  try{
+    await mondayWrite(person.id,{[columnId]: label?{label}:{}}, ",create_labels_if_missing:true");
+    if(fkey==="__closeness__"){ const m=(label||"").match(/\((\d+)\)/); person.closeness={tier:m?parseInt(m[1]):150, label:(label||"").split(" (")[0]||"Extended"}; }
+    else if(STATUS_FIELD[columnId]) person[STATUS_FIELD[columnId]]=label||null;
+    toast("Saved ✓"); afterEdit(person);
+  }catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+function editStatus(person,columnId,fkey,label){
+  const cur = fkey==="__closeness__" ? person.closeness.label : (STATUS_FIELD[columnId]?person[STATUS_FIELD[columnId]]:null);
+  const opts=STATUS_OPTS[columnId]||[]; const curFull=opts.find(o=>o===cur||o.split(" (")[0]===cur)||"";
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:320px"><div class="picker-head"><h3>${label} — ${person.name}</h3><select id="st-in"><option value="">—</option>${opts.map(o=>`<option value="${esc(o)}" ${o===curFull?"selected":""}>${o}</option>`).join("")}</select></div><div class="picker-foot"><button class="tab" id="st-cancel">Cancel</button> <button class="tab" id="st-save" style="border:1px solid var(--accent);color:var(--accent)">Save</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector("#st-save").addEventListener("click",async()=>{const v=ov.querySelector("#st-in").value;ov.remove();await setStatus(person,columnId,fkey,v||null);});
+  ov.querySelector("#st-cancel").addEventListener("click",()=>ov.remove()); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+async function setNumber(person,columnId,value){
+  try{ await mondayWrite(person.id,{[columnId]:(value!==""&&value!=null)?String(value):""}); if(columnId==="numeric_mm3wz3fb")person.age=(value!==""&&value!=null)?parseInt(value):null; toast("Saved ✓"); afterEdit(person); }
+  catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+function editNumber(person,columnId,label){
+  const cur = columnId==="numeric_mm3wz3fb" ? (person.age??"") : "";
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:300px"><div class="picker-head"><h3>${label} — ${person.name}</h3><input id="num-in" type="number" value="${cur}" style="${_IN}"></div><div class="picker-foot"><button class="tab" id="num-clear" style="float:left">Clear</button><button class="tab" id="num-cancel">Cancel</button> <button class="tab" id="num-save" style="border:1px solid var(--accent);color:var(--accent)">Save</button></div></div>`;
+  document.body.appendChild(ov); const inp=ov.querySelector("#num-in"); inp.focus();
+  ov.querySelector("#num-save").addEventListener("click",async()=>{const v=inp.value;ov.remove();await setNumber(person,columnId,v);});
+  ov.querySelector("#num-clear").addEventListener("click",async()=>{ov.remove();await setNumber(person,columnId,"");});
+  ov.querySelector("#num-cancel").addEventListener("click",()=>ov.remove()); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+async function setContact(person,kind,value){
+  const v=(value||"").trim(), col=kind==="phone"?"phone":"email";
+  const val = kind==="phone" ? (v?{phone:v,countryShortName:"AU"}:{}) : (v?{email:v,text:v}:{});
+  try{ await mondayWrite(person.id,{[col]:val}); person[kind]=v||null; toast("Saved ✓"); afterEdit(person); }
+  catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+function editContact(person,kind,label){
+  const cur=person[kind]||"";
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:340px"><div class="picker-head"><h3>${label} — ${person.name}</h3><input id="ct-in" type="${kind==='email'?'email':'tel'}" value="${esc(cur)}" style="${_IN}"></div><div class="picker-foot"><button class="tab" id="ct-cancel">Cancel</button> <button class="tab" id="ct-save" style="border:1px solid var(--accent);color:var(--accent)">Save</button></div></div>`;
+  document.body.appendChild(ov); const inp=ov.querySelector("#ct-in"); inp.focus();
+  ov.querySelector("#ct-save").addEventListener("click",async()=>{const v=inp.value;ov.remove();await setContact(person,kind,v);});
+  ov.querySelector("#ct-cancel").addEventListener("click",()=>ov.remove()); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+let _families=null;
+async function fetchFamilies(){ if(_families)return _families; _families=await sbGet("families?select=id,name&order=name"); return _families; }
+async function setHousehold(person,familyId,familyName){
+  try{ await sbPatch("contacts","id",person.id,{household_id: familyId?Number(familyId):null}); person.householdId=familyId?Number(familyId):null; person.household=familyName||null; toast("Saved ✓"); afterEdit(person); }
+  catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+async function editHousehold(person){
+  toast("Loading households…");
+  let fams; try{ fams=await fetchFamilies(); }catch(err){ toast("Couldn't load households",true); console.warn(err); return; }
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker"><div class="picker-head"><h3>Household for ${person.name}</h3><input type="search" placeholder="Filter, or type a new family name…" id="hh-s"></div><div class="picker-list" id="hh-l"></div><div class="picker-foot"><button class="tab" id="hh-none" style="float:left">No household</button><button class="tab" id="hh-x">Close</button></div></div>`;
+  document.body.appendChild(ov);
+  const l=ov.querySelector("#hh-l"), s=ov.querySelector("#hh-s");
+  function draw(q){ const qt=q.trim();
+    const f=qt?fams.filter(x=>x.name.toLowerCase().includes(qt.toLowerCase())):fams;
+    let html=f.map(x=>`<div class="picker-item" data-fid="${x.id}" data-fname="${esc(x.name)}"><span class="pi-dot" style="background:#fdab3d"></span><span>${x.name}</span></div>`).join("");
+    const exact=fams.some(x=>x.name.toLowerCase()===qt.toLowerCase());
+    if(qt&&!exact) html+=`<div class="picker-item" data-newfam="${esc(qt)}"><span class="pi-dot" style="background:var(--accent)"></span><span>＋ Create household "<strong>${esc(qt)}</strong>"</span></div>`;
+    l.innerHTML=html||`<div style="padding:14px;color:var(--muted)">Type a family name to create it.</div>`;
+    l.querySelectorAll("[data-fid]").forEach(it=>it.addEventListener("click",async()=>{ov.remove();await setHousehold(person,it.dataset.fid,it.dataset.fname);}));
+    const nf=l.querySelector("[data-newfam]");
+    if(nf) nf.addEventListener("click",async()=>{ ov.remove(); try{ const id=Date.now(); await sbInsert("families",[{id,name:nf.dataset.newfam}]); _families.push({id,name:nf.dataset.newfam}); await setHousehold(person,id,nf.dataset.newfam); }catch(err){ toast("Couldn't create household",true); console.warn(err);} });
+  }
+  s.addEventListener("input",()=>draw(s.value)); ov.querySelector("#hh-x").addEventListener("click",()=>ov.remove());
+  ov.querySelector("#hh-none").addEventListener("click",async()=>{ov.remove();await setHousehold(person,null,null);});
+  ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();}); draw(""); s.focus();
+}
+
+// ── AUTH GATE — Supabase + Google, restricted to two accounts ──────────
+const ALLOW=["santi@parsons-aubone.com","cinthia@parsons-aubone.com"];
+(function injectGateStyle(){ const s=document.createElement("style"); s.textContent=`
+#auth-gate{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--bg,#0d0f12)}
+#auth-gate .gc{background:var(--panel,#16191f);border:1px solid var(--border,#262b33);border-radius:16px;padding:42px 36px;max-width:360px;width:90%;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+#auth-gate .gt{font-size:27px;font-weight:700;color:var(--text,#e8eaed);letter-spacing:.4px}
+#auth-gate .gs{font-size:13px;color:var(--muted,#9aa0a6);margin:10px 0 26px;line-height:1.5}
+#auth-gate .gb{display:inline-flex;align-items:center;gap:10px;background:#fff;color:#1f1f1f;border:none;border-radius:9px;padding:12px 18px;font-size:14px;font-weight:600;cursor:pointer;width:100%;justify-content:center}
+#auth-gate .gb:hover{background:#f1f3f4}
+#auth-gate .gf{font-size:11px;color:var(--muted,#9aa0a6);margin-top:20px}
+#signout-btn{position:fixed;bottom:14px;right:14px;z-index:9998;background:var(--panel,#16191f);color:var(--muted,#9aa0a6);border:1px solid var(--border,#262b33);border-radius:20px;padding:6px 13px;font-size:12px;cursor:pointer}
+#signout-btn:hover{color:var(--text,#e8eaed)}
+`; document.head.appendChild(s); })();
+const _GOOGLE_SVG='<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.6 2.4 30.1 0 24 0 14.6 0 6.4 5.4 2.5 13.3l7.9 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.2-3.9 6.6-9.6 6.6-16.5z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.1 0 11.3-2 15-5.5l-7.1-5.5c-2 1.3-4.5 2.1-7.9 2.1-6.3 0-11.7-3.7-13.6-9.1l-7.9 6.1C6.4 42.6 14.6 48 24 48z"/></svg>';
+const _sbAuth=window.supabase.createClient(SUPA.url, SUPA.key);
+function showGate(msg){
+  let g=document.getElementById("auth-gate");
+  if(!g){ g=document.createElement("div"); g.id="auth-gate"; document.body.appendChild(g); }
+  g.innerHTML=`<div class="gc"><div class="gt">The Joneses</div><div class="gs">${msg||"Private relationship map.<br>Sign in to continue."}</div><button id="gate-google" class="gb">${_GOOGLE_SVG}<span>Continue with Google</span></button><div class="gf">Access is limited to authorised accounts.</div></div>`;
+  g.style.display="flex";
+  document.getElementById("gate-google").onclick=()=>_sbAuth.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.origin+location.pathname}});
+}
+function hideGate(){ const g=document.getElementById("auth-gate"); if(g)g.style.display="none"; }
+function addSignOut(email){
+  let b=document.getElementById("signout-btn");
+  if(!b){ b=document.createElement("button"); b.id="signout-btn"; document.body.appendChild(b); }
+  b.textContent="⏻ "+email.split("@")[0]; b.title="Signed in as "+email+" — sign out";
+  b.onclick=async()=>{ await _sbAuth.auth.signOut(); location.reload(); };
+}
+let _authBooted=false;
+async function _gateApply(session){
+  if(session && session.access_token){
+    const email=(session.user.email||"").toLowerCase();
+    if(!ALLOW.includes(email)){ await _sbAuth.auth.signOut(); AUTH_TOKEN=null; showGate("That account isn't authorised for The Joneses."); return; }
+    AUTH_TOKEN=session.access_token;
+    if(!_authBooted){ _authBooted=true; hideGate(); addSignOut(email); liveRefresh(); }
+  } else { AUTH_TOKEN=null; if(!_authBooted) showGate(); }
+}
+_sbAuth.auth.onAuthStateChange((_e,s)=>_gateApply(s));
+_sbAuth.auth.getSession().then(({data})=>_gateApply(data.session));
+</script>
+</body>
+</html>

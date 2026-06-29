@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<title>The Joneses — Relationship Map</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root { --bg:#0f1116; --panel:#1a1d24; --panel-2:#232730; --text:#e8eaed; --muted:#9aa0a6; --accent:#4eccc6; --border:#2a2e36; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); overflow:hidden; }
+  #app { display:grid; grid-template-columns:280px 1fr 340px; height:100vh; }
+  .panel { background:var(--panel); border-right:1px solid var(--border); padding:18px; overflow-y:auto; }
+  .panel.right { border-right:none; border-left:1px solid var(--border); }
+  h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+  h2 { font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin:18px 0 8px; font-weight:600; }
+  .subtitle { color:var(--muted); font-size:12px; margin-bottom:14px; }
+  input[type="search"] { width:100%; padding:8px 10px; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; font-size:13px; }
+  input[type="search"]:focus { outline:1px solid var(--accent); }
+  .filter-row { display:flex; align-items:center; padding:4px 0; cursor:pointer; font-size:13px; gap:8px; }
+  .filter-row:hover { color:#fff; }
+  .swatch { width:11px; height:11px; border-radius:50%; flex-shrink:0; }
+  .count { color:var(--muted); margin-left:auto; font-size:11px; }
+  .toggle { background:var(--panel-2); border:1px solid var(--border); color:var(--text); padding:5px 11px; border-radius:6px; font-size:12px; cursor:pointer; margin:0 4px 4px 0; }
+  .toggle.on { background:var(--accent); color:#000; border-color:var(--accent); }
+  #graph { background:radial-gradient(circle at 50% 50%,#161922,#0f1116); position:relative; }
+  #graph svg { width:100%; height:100%; display:block; }
+  .legend { position:absolute; bottom:14px; left:14px; background:rgba(20,22,28,.92); padding:10px 14px; border-radius:8px; font-size:11px; border:1px solid var(--border); }
+  .legend-row { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  .legend-line { display:inline-block; width:24px; height:2px; }
+  .stats-bar { position:absolute; top:14px; right:14px; background:rgba(20,22,28,.92); padding:7px 14px; border-radius:8px; font-size:11px; border:1px solid var(--border); color:var(--muted); }
+  .node circle { stroke-width:2px; cursor:pointer; }
+  .node text { font-size:10px; fill:var(--text); pointer-events:none; text-anchor:middle; font-weight:500; }
+  .node.focused circle { stroke:#fff; stroke-width:3px; }
+  .node.dimmed { opacity:.15; }
+  .link { stroke-opacity:.55; pointer-events:none; }
+  .link.dimmed { opacity:.06; }
+  .info-photo { width:100%; aspect-ratio:1; border-radius:12px; background:var(--panel-2); background-size:cover; background-position:center; border:1px solid var(--border); margin-bottom:14px; display:flex; align-items:center; justify-content:center; font-size:64px; color:var(--muted); overflow:hidden; }
+  .info-photo img { width:100%; height:100%; object-fit:cover; }
+  .info-name { font-size:20px; font-weight:600; margin-bottom:4px; }
+  .info-meta { color:var(--muted); font-size:13px; margin-bottom:10px; }
+  .info-tags { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0 12px; }
+  .info-tag { background:var(--panel-2); padding:2px 9px; border-radius:999px; font-size:11px; border:1px solid var(--border); }
+  .info-section { margin-bottom:12px; padding-top:10px; border-top:1px solid var(--border); }
+  .info-section h3 { font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin:0 0 6px; }
+  .info-list { list-style:none; padding:0; margin:0; font-size:13px; }
+  .info-list li { padding:3px 0; cursor:pointer; }
+  .info-list li:hover { color:var(--accent); }
+  .empty-state { color:var(--muted); font-size:13px; line-height:1.7; padding:40px 0; text-align:center; }
+  a { color:var(--accent); text-decoration:none; }
+  .stamp { font-size:10px; color:var(--muted); margin-top:24px; padding-top:12px; border-top:1px solid var(--border); line-height:1.6; }
+  /* ── Interactive layer ── */
+  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--panel-2); border:1px solid var(--border); color:var(--text); padding:9px 16px; border-radius:8px; font-size:13px; z-index:400; opacity:0; transition:opacity .2s; pointer-events:none; box-shadow:0 6px 24px rgba(0,0,0,.45); }
+  .toast.show { opacity:1; }
+  .toast.err { border-color:#df2f4a; color:#ff8a9c; }
+  .minicard { position:fixed; z-index:200; width:212px; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:10px; font-size:12px; pointer-events:none; box-shadow:0 8px 28px rgba(0,0,0,.5); opacity:0; transition:opacity .12s; }
+  .minicard.show { opacity:1; }
+  .minicard .mc-photo { width:44px; height:44px; border-radius:8px; object-fit:cover; float:left; margin-right:9px; background:var(--panel); }
+  .minicard .mc-name { font-weight:600; font-size:13px; }
+  .minicard .mc-meta { color:var(--muted); font-size:11px; line-height:1.5; }
+  .picker-overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:300; display:flex; align-items:center; justify-content:center; }
+  .picker { width:380px; max-width:92vw; max-height:74vh; background:var(--panel); border:1px solid var(--border); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.6); }
+  .picker-head { padding:14px 16px 10px; border-bottom:1px solid var(--border); }
+  .picker-head h3 { margin:0 0 8px; font-size:14px; }
+  .picker-head input { width:100%; padding:8px 10px; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; font-size:13px; }
+  .picker-list { overflow-y:auto; padding:6px; }
+  .picker-item { display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:7px; cursor:pointer; font-size:13px; }
+  .picker-item:hover { background:var(--panel-2); }
+  .picker-item .pi-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .picker-item .pi-sub { color:var(--muted); font-size:11px; margin-left:auto; }
+  .picker-foot { padding:8px 14px; border-top:1px solid var(--border); text-align:right; }
+  .btn-add { background:none; border:1px solid var(--border); color:var(--muted); min-width:20px; height:20px; line-height:1; border-radius:5px; cursor:pointer; font-size:13px; padding:0 4px; }
+  .btn-add:hover { color:var(--accent); border-color:var(--accent); }
+  .edit-link { color:var(--muted); cursor:pointer; font-size:11px; border:1px dashed var(--border); border-radius:5px; padding:1px 6px; margin-left:6px; }
+  .edit-link:hover { color:var(--accent); border-color:var(--accent); }
+  .chip-x { margin-left:5px; opacity:.5; cursor:pointer; font-weight:700; }
+  .chip-x:hover { opacity:1; color:#ff8a9c; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<div id="app">
+  <aside class="panel">
+    <h1>The Joneses</h1>
+    <div class="subtitle" id="subtitle">Relationship map</div>
+    <input type="search" id="search" placeholder="Search a name…">
+    <h2>Circles — tick to isolate</h2>
+    <div style="font-size:11px;color:var(--muted);margin:-4px 0 8px">Untick all but one to see just that club. People belong to several.</div>
+    <div id="circle-controls" style="margin-bottom:6px">
+      <button id="circles-all" class="toggle on" style="font-size:11px;padding:3px 8px">All</button>
+      <button id="circles-none" class="toggle" style="font-size:11px;padding:3px 8px">None</button>
+    </div>
+    <div id="circle-filters"></div>
+    <h2>Vocation</h2>
+    <div id="vocation-filters"></div>
+    <h2>Country of Origin</h2>
+    <div id="country-filters"></div>
+    <h2>School</h2>
+    <div id="school-filters"></div>
+    <h2>Class with our kid</h2>
+    <div id="class-filters"></div>
+    <h2>Group by</h2>
+    <div>
+      <button class="toggle on" data-mode="circle">Social circle</button>
+      <button class="toggle" data-mode="household">Household</button>
+      <button class="toggle" data-mode="closeness">Closeness</button>
+    </div>
+    <h2>Show links</h2>
+    <div>
+      <button class="toggle on" data-link="household">Household</button>
+      <button class="toggle on" data-link="partner">Partner</button>
+      <button class="toggle on" data-link="circle">Circle</button>
+      <button class="toggle on" data-link="parent">Parent–child</button>
+    </div>
+    <h2>Layout</h2>
+    <div>
+      <button id="re-centre" class="toggle">Re-centre</button>
+      <button id="freeze" class="toggle">Freeze</button>
+    </div>
+    <h2>Data</h2>
+    <div>
+      <button id="refresh-btn" class="toggle">↻ Refresh from Monday</button>
+    </div>
+    <div class="stamp" id="stamp"></div>
+  </aside>
+
+  <main id="graph">
+    <svg></svg>
+    <div class="legend">
+      <div class="legend-row"><span class="legend-line" style="background:#ff158a;height:3px"></span>Partner</div>
+      <div class="legend-row"><span class="legend-line" style="background:#fdab3d;height:2px"></span>Same household</div>
+      <div class="legend-row"><span class="legend-line" style="background:#4eccc6;height:1px;opacity:.5"></span>Same circle</div>
+      <div class="legend-row"><span class="legend-line" style="background:#a25ddc;height:1px;border-top:1px dashed #a25ddc"></span>Parent–child</div>
+    </div>
+    <div class="stats-bar" id="stats"></div>
+  </main>
+
+  <aside class="panel right">
+    <div id="info"><div class="empty-state">Click any node to see<br>their relationship card.</div></div>
+  </aside>
+</div>
+
+<script>
+// ── DATA (regenerated 2026-06-28 18:34) ──────────────────────────────
+const GENERATED_AT = "2026-06-28 18:34";
+const PEOPLE = [];
+// ── END DATA ─────────────────────────────────────────────────────────
+
+// ── CONFIG ───────────────────────────────────────────────────────────
+const CONTACTS_BOARD = 18408024949;
+
+const CIRCLE_DEFS = [
+  {id:"12145324147",label:"Inner Circle",        colour:"#df2f4a"},
+  {id:"12145344671",label:"Steve's Circle",      colour:"#a25ddc"},
+  {id:"12208250357",label:"Club of Gentlemen",   colour:"#ffcb00"},
+  {id:"12208357512",label:"Pat Coyne's Circle",  colour:"#ff7575"},
+  {id:"12145330009",label:"School Parents",      colour:"#fdab3d"},
+  {id:"12145417298",label:"Parish — Opus Dei",   colour:"#225091"},
+  {id:"12145329931",label:"Southeast Neighbours",colour:"#4eccc6"},
+  {id:"12147767023",label:"PARED Football",      colour:"#037f4c"},
+  {id:"12147609836",label:"Comrades",            colour:"#9cd326"},
+  {id:"12147640823",label:"Friends of Drummond", colour:"#ff158a"},
+  {id:"12147622252",label:"Order of Malta",      colour:"#bb3354"},
+  {id:"12147753459",label:"HHC",                 colour:"#7e5bef"},
+  {id:"12147640824",label:"Argentinos AU",       colour:"#66ccff"},
+  {id:"12145329984",label:"August Family",       colour:"#faa1f1"},
+  {id:"12208215560",label:"Parsons-Aubone Family",colour:"#e84a8a"},
+  {id:"12145324149",label:"Waste Stream",        colour:"#9aa0a6"},
+  {id:"12389760806",label:"Cinthia · Inner Circle",colour:"#ff66b3"},
+  {id:"12389629873",label:"Santiago · Inner Circle",colour:"#3399ff"},
+  {id:"12389622774",label:"Sophia · Friends",     colour:"#ff8a5c"},
+  {id:"12389629503",label:"Augusto · Friends",    colour:"#7bd88f"},
+  {id:"12389629614",label:"Ian · Friends",        colour:"#ba8cff"},
+];
+const CIRCLE_MAP = Object.fromEntries(CIRCLE_DEFS.map(c=>[c.id,c]));
+const FALLBACK   = {id:"__none__",label:"Wider Circle",colour:"#5a6270"};
+const NATION_LABELS=["Argentina","Australia","Chile","Colombia","Cuba","El Salvador","Germany","Italy","Japan","Lebanon","Malaysia","Netherlands","New Zealand","Nigeria","Other","Philippines","South Africa","Vietnam"];
+const TEXTCOL_FIELD={ "text_mm3v9dpn":"nickname","text_mm4rgpf":"maidenName","text_mm3vfnew":"howWeMet","text_mm3vvqwm":"childrenNotes","text_mm3vyn85":"pets","text_mm3v898a":"dietary","long_text_mm3vp521":"pinnedNotes","long_text_mm3vwd7g":"story","long_text_mm3vtdth":"giftIdeas","long_text_mm4r2eg1":"howToApproach","long_text_mm4rcs0j":"groupActivity" };
+const STATUS_OPTS={
+ "color_mm3vy03m":["Parent","Child","Single","Priest / Religious","Other"],
+ "color_mm3v2ch5":["Inner Circle (5)","Sympathy Group (15)","Active Network (50)","Extended (150)","Acquaintance"],
+ "color_mm3vfjet":["Numerary (Opus Dei)","Supernumerary (Opus Dei)","Cooperator (Opus Dei)","Practising Catholic","Lapsed Catholic","Other Christian","Other","None"],
+ "color_mm3vfwnv":["HHC (Harkaway Hills College)","Other Catholic School","State School","Independent School","Pre-school","University","None / Adult"],
+ "color_mm3vgj62":["Pre-Prep","Prep","Year 1","Year 2","Year 3","Year 4","Year 5","Year 6","Year 7","Year 8","Year 9","Year 10","Year 11","Year 12"],
+ "color_mm3vqpx1":["Sophia's class","Augusto's class","Both","Sibling of friend","Same school, other year","Different school"] };
+const STATUS_FIELD={ "color_mm3vy03m":"role","color_mm3vfjet":"religion","color_mm3vfwnv":"school","color_mm3vgj62":"schoolYear","color_mm3vqpx1":"classKid" };
+const CIRCLE_PALETTE=["#ff5ca0","#5ad1ff","#ffd34e","#7bd88f","#b388ff","#ff8a65","#4dd0e1","#f06292","#aed581","#ba68c8","#ffb74d","#4fc3f7"];
+
+// ── GRAPH ────────────────────────────────────────────────────────────
+const svg = d3.select("#graph svg");
+const gEl = svg.append("g");
+let width=0, height=0, simulation, linkSel, nodeSel;
+let currentPerson=null;   // person whose card is open (so edits can re-render it)
+
+const state = {
+  groupMode:"circle",
+  showHousehold:true, showPartner:true, showCircle:true, showParent:true,
+  visibleCircleIds: new Set([...CIRCLE_DEFS.map(c=>c.id),"__none__"]),
+  visibleCountries: new Set(),  // populated by buildPropertyFilter
+  visibleSchools:   new Set(),
+  visibleClasses:   new Set(),
+  visibleVocations: new Set(),
+  frozen:false,
+};
+
+function passesFilters(p) {
+  // Circle filter is MEMBERSHIP-based: a person shows if they belong to ANY ticked circle
+  // (so ticking only "Club of Gentlemen" isolates its members). People in no circle map to
+  // the "__none__" pseudo-circle. This is the many-to-many filter — one person, several clubs.
+  const mineIds = (p.circleIds && p.circleIds.length) ? p.circleIds : ["__none__"];
+  if (!mineIds.some(id => state.visibleCircleIds.has(id))) return false;
+  if (state.visibleCountries.size) {
+    const cs=[p.country,p.country2,p.country3].filter(Boolean); if(!cs.length)cs.push("—");
+    if(!cs.some(c=>state.visibleCountries.has(c))) return false;
+  }
+  if (state.visibleSchools.size   && !state.visibleSchools.has(p.school || "—")) return false;
+  if (state.visibleClasses.size   && !state.visibleClasses.has(p.classKid || "—")) return false;
+  if (state.visibleVocations.size && !state.visibleVocations.has(p.religion || "—")) return false;
+  return true;
+}
+
+function resize() {
+  const el=document.querySelector("#graph");
+  width=el.clientWidth; height=el.clientHeight;
+  svg.attr("viewBox",`0 0 ${width} ${height}`);
+}
+resize(); window.addEventListener("resize",resize);
+svg.call(d3.zoom().scaleExtent([0.15,5]).on("zoom",e=>gEl.attr("transform",e.transform)));
+
+function buildLinks() {
+  const links=[];
+  const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
+  const byHousehold={};
+  PEOPLE.forEach(p=>{ if(p.householdId)(byHousehold[p.householdId]||=[]).push(p); });
+
+  if(state.showPartner){
+    const done=new Set();
+    PEOPLE.forEach(p=>{
+      const key=Math.min(p.id,p.partnerId)+"-"+Math.max(p.id,p.partnerId);
+      if(p.partnerId && !done.has(key)){
+        // Very strong attraction — partners interlock like wedding rings
+        links.push({source:p.id,target:p.partnerId,type:"partner",colour:"#ff158a",width:0,strength:3});
+        done.add(key);
+      }
+    });
+  }
+  if(state.showHousehold){
+    Object.values(byHousehold).forEach(members=>{
+      for(let i=0;i<members.length-1;i++)
+        links.push({source:members[i].id,target:members[i+1].id,type:"household",colour:"#fdab3d",width:2,strength:0.7});
+    });
+  }
+  if(state.showParent){
+    PEOPLE.forEach(p=>{
+      p.parentIds.forEach(pid=>{
+        if(byId[pid])links.push({source:p.id,target:pid,type:"parent",colour:"#a25ddc",width:1.5,strength:0.8,dashed:true});
+      });
+    });
+  }
+  if(state.showCircle){
+    CIRCLE_DEFS.forEach(c=>{
+      const m=PEOPLE.filter(p=>p.circleIds.includes(c.id));
+      for(let i=0;i<m.length-1;i++)
+        links.push({source:m[i].id,target:m[i+1].id,type:"circle",colour:c.colour,width:1,strength:0.12});
+    });
+  }
+  return links;
+}
+
+function nodeRadius(d){return d.closeness.tier===5?24:d.closeness.tier===15?20:d.closeness.tier===50?16:13;}
+function shortLabel(d){
+  // Prefer the nickname (what we actually call them). Otherwise take the FIRST given name
+  // (the word right after the surname), stripping any "(second names)" or quotes — so
+  // "Parsons-Aubone Sophia (Maria Ana)" shows "Sophia P.", not the second name "Ana".
+  if(d.nickname) return d.nickname;
+  const clean = d.name.replace(/\([^)]*\)/g,"").replace(/"[^"]+"/g,"").replace(/\s+/g," ").trim();
+  const p = clean.split(" ");
+  if(p.length>=2) return `${p[1]} ${p[0][0]}.`;
+  return clean;
+}
+
+function layoutClusters(keys){
+  const n=keys.length,r=Math.min(width,height)*.3,res={};
+  keys.forEach((k,i)=>{const a=(i/Math.max(n,1))*2*Math.PI-Math.PI/2;res[k]={x:width/2+r*Math.cos(a),y:height/2+r*Math.sin(a)};});
+  return res;
+}
+
+let lastPositions = {};   // id → {x,y} preserved across re-renders
+function renderGraph(){
+  // A re-render (data refresh OR filter toggle) must NOT re-run the physics layout, or the
+  // whole graph visibly re-shuffles ("it reverts / jumps around"). So: on any re-render we
+  // (1) remember every node's current position, then (2) PIN each node to that exact spot.
+  // The refresh then only swaps colours / labels / sizes — nothing moves a pixel.
+  const isRerender = !!simulation;
+  if(simulation){
+    simulation.nodes().forEach(n=>{ lastPositions[n.id]={x:n.x,y:n.y}; });
+    simulation.on("tick",null); simulation.stop(); simulation=null;
+  }
+  gEl.selectAll("*").remove();
+  const defs=gEl.append("defs");
+  const visible=PEOPLE.filter(passesFilters);
+  const visById=Object.fromEntries(visible.map(p=>[p.id,p]));
+  // Restore + pin prior positions. Nodes that existed before stay frozen exactly in place;
+  // genuinely new nodes (rare — only after add/remove) fall back to physics near centre.
+  let restored=0;
+  visible.forEach(p=>{
+    const s=lastPositions[p.id];
+    if(s){ p.x=p.fx=s.x; p.y=p.fy=s.y; restored++; }
+    else { p.fx=null; p.fy=null; }
+  });
+  const visIds=new Set(visible.map(p=>p.id));
+  const links=buildLinks().filter(l=>visIds.has(typeof l.source==="object"?l.source.id:l.source)&&visIds.has(typeof l.target==="object"?l.target.id:l.target));
+
+  visible.filter(p=>p.photo).forEach(p=>{
+    const sz=nodeRadius(p)*2;
+    const pat=defs.append("pattern").attr("id",`ph-${p.id}`).attr("width",1).attr("height",1);
+    const img=pat.append("image").attr("href",p.photo).attr("width",sz).attr("height",sz).attr("preserveAspectRatio","xMidYMid slice");
+    img.on("error",function(){d3.select(this.parentNode).remove();});
+  });
+
+  // Partner-aware collision: partners can overlap (touch like rings); others stay apart
+  const partnerSet=new Set();
+  PEOPLE.forEach(p=>{if(p.partnerId)partnerSet.add(Math.min(p.id,p.partnerId)+"-"+Math.max(p.id,p.partnerId));});
+  function arePartners(a,b){return partnerSet.has(Math.min(a.id,b.id)+"-"+Math.max(a.id,b.id));}
+
+  simulation=d3.forceSimulation(visible)
+    .force("link",d3.forceLink(links).id(d=>d.id).distance(l=>{
+      if(l.type==="partner") return (nodeRadius(l.source)+nodeRadius(l.target))*0.62; // interlock like two wedding rings
+      if(l.type==="parent")return 62;
+      if(l.type==="household")return 78;
+      return 132;
+    }).strength(l=>l.strength))
+    .force("charge",d3.forceManyBody().strength(-260))
+    .force("centre",d3.forceCenter(width/2,height/2))
+    // Custom collision: keep everyone apart EXCEPT married couples, whose geometry is fixed in the tick.
+    .force("collide", function(alpha){
+      for(let i=0;i<visible.length;i++)for(let j=i+1;j<visible.length;j++){
+        const a=visible[i],b=visible[j];
+        if(arePartners(a,b)) continue;                 // couples interlock — handled by the tick constraint
+        const minD=nodeRadius(a)+nodeRadius(b)+6;
+        let dx=b.x-a.x, dy=b.y-a.y, d=Math.sqrt(dx*dx+dy*dy)||0.01;
+        if(d<minD){ const f=(minD-d)/d*0.6*alpha, ux=dx*f, uy=dy*f; a.vx-=ux; a.vy-=uy; b.vx+=ux; b.vy+=uy; }
+      }
+    })
+    // If most nodes kept their positions (a refresh / filter toggle), barely reheat the
+    // layout so it settles gently instead of exploding back to a fresh random layout.
+    .alpha(restored > visible.length*0.5 ? 0.12 : 1).alphaDecay(0.025);
+
+  if(state.groupMode==="circle"){
+    const pos=layoutClusters([...new Set(visible.map(p=>p.circle?.id||"__none__"))]);
+    simulation.force("x",d3.forceX(d=>pos[d.circle?.id||"__none__"].x).strength(0.12));
+    simulation.force("y",d3.forceY(d=>pos[d.circle?.id||"__none__"].y).strength(0.12));
+  } else if(state.groupMode==="household"){
+    const pos=layoutClusters([...new Set(visible.map(p=>String(p.householdId||`_${p.id}`)))]);
+    simulation.force("x",d3.forceX(d=>pos[String(d.householdId||`_${d.id}`)].x).strength(0.18));
+    simulation.force("y",d3.forceY(d=>pos[String(d.householdId||`_${d.id}`)].y).strength(0.18));
+  } else if(state.groupMode==="closeness"){
+    const pos=layoutClusters(["5","15","50","150"]);
+    simulation.force("x",d3.forceX(d=>pos[String(d.closeness.tier)].x).strength(0.15));
+    simulation.force("y",d3.forceY(d=>pos[String(d.closeness.tier)].y).strength(0.15));
+  }
+
+  linkSel=gEl.append("g").selectAll("line").data(links).join("line")
+    .attr("class","link").attr("stroke",d=>d.colour).attr("stroke-width",d=>d.width)
+    .attr("stroke-dasharray",d=>d.dashed?"5 3":null);
+
+  nodeSel=gEl.append("g").selectAll("g.node").data(visible,d=>d.id).join("g").attr("class","node")
+    .call(d3.drag()
+      .on("start",(e,d)=>{if(!e.active)simulation.alphaTarget(.25).restart();d.fx=d.x;d.fy=d.y;})
+      .on("drag",(e,d)=>{d.fx=e.x;d.fy=e.y;})
+      .on("end",(e,d)=>{if(!e.active)simulation.alphaTarget(0);if(!state.frozen){d.fx=null;d.fy=null;}}))
+    .on("click",(_,d)=>selectPerson(d))
+    .on("mouseenter",(e,d)=>showMiniCard(e,d))
+    .on("mousemove",(e)=>moveMiniCard(e))
+    .on("mouseleave",()=>hideMiniCard());
+
+  nodeSel.append("circle").attr("r",d=>nodeRadius(d))
+    .attr("fill",d=>d.photo?`url(#ph-${d.id})`:d.circle.colour)
+    .attr("stroke",d=>d.partnerId?"#ffcf3f":d.circle.colour)      // gold wedding band on married couples
+    .style("stroke-width",d=>d.partnerId?"3.5px":null);
+
+  nodeSel.append("text").attr("dy",d=>nodeRadius(d)+12).text(d=>shortLabel(d));
+
+  simulation.on("tick",()=>{
+    // Couple constraint (post-force): pin each married pair to a fixed interlock around their midpoint,
+    // so husband & wife are co-equal rings — neither drifts off as "secondary".
+    const seen=new Set();
+    for(const p of visible){
+      const q=visById[p.partnerId];
+      if(q && !seen.has(p.id)){
+        seen.add(p.id); seen.add(q.id);
+        const mx=(p.x+q.x)/2, my=(p.y+q.y)/2, target=Math.max(nodeRadius(p),nodeRadius(q))*1.15;
+        let dx=q.x-p.x, dy=q.y-p.y, d=Math.sqrt(dx*dx+dy*dy)||1; dx/=d; dy/=d;
+        if(p.fx==null){ p.x=mx-dx*target/2; p.y=my-dy*target/2; }
+        if(q.fx==null){ q.x=mx+dx*target/2; q.y=my+dy*target/2; }
+      }
+    }
+    linkSel.attr("x1",d=>d.source.x).attr("y1",d=>d.source.y).attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
+    nodeSel.attr("transform",d=>`translate(${d.x},${d.y})`);
+    // Push each partner's label outward so both names read equally.
+    nodeSel.filter(d=>d.partnerId&&visById[d.partnerId]).select("text").each(function(d){
+      const pn=visById[d.partnerId], r=nodeRadius(d), left=d.x<=pn.x;
+      d3.select(this).attr("x",left?-(r+5):(r+5)).attr("dy",4).style("text-anchor",left?"end":"start");
+    });
+  });
+  if(state.frozen) PEOPLE.forEach(p=>{if(p.x!==undefined){p.fx=p.x;p.fy=p.y;}});
+  document.getElementById("stats").textContent=`${visible.length} people · ${links.length} links`;
+}
+
+// ── AGE ───────────────────────────────────────────────────────────────
+// Prefer a real birthday (auto-updates each year); fall back to the manual Age field.
+function ageOf(p){
+  if(p.birthday){
+    const y=parseInt(p.birthday.slice(0,4));
+    if(y && y < new Date().getFullYear()){           // real birth year, not a day/month placeholder
+      const bd=new Date(p.birthday), now=new Date();
+      let a=now.getFullYear()-bd.getFullYear();
+      const m=now.getMonth()-bd.getMonth();
+      if(m<0 || (m===0 && now.getDate()<bd.getDate())) a--;
+      return a;
+    }
+  }
+  return (p.age!=null && p.age!=="") ? p.age : null;
+}
+function ageTag(p){ const a=ageOf(p); return a!=null ? ` <span style="color:var(--muted);font-weight:400">(${a})</span>` : ""; }
+
+// Format a YYYY-MM-DD date. If the year is a day/month placeholder (current year or later),
+// show just "DD Mon"; otherwise include the real year.
+const _MONS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function fmtDate(s){
+  if(!s) return "";
+  const [y,m,d]=s.split("-").map(Number);
+  const dm=`${d} ${_MONS[m-1]}`;
+  return (y && y < new Date().getFullYear()) ? `${dm} ${y}` : dm;
+}
+// Years since an anniversary, only when a real (past) year is recorded.
+function annYears(s){
+  if(!s) return null;
+  const y=parseInt(s.slice(0,4));
+  if(y && y < new Date().getFullYear()) return new Date().getFullYear()-y;
+  return null;
+}
+
+// ── FAMILY TREE ───────────────────────────────────────────────────────
+function familyTree(d){
+  const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
+  const uniq=arr=>[...new Map(arr.filter(Boolean).map(x=>[x.id,x])).values()];
+  const up=ids=>ids.map(id=>byId[id]).filter(Boolean);
+  const parents=uniq(up(d.parentIds));
+  const grandparents=uniq(parents.flatMap(p=>up(p.parentIds)));
+  const greatGP=uniq(grandparents.flatMap(p=>up(p.parentIds)));
+  const children=PEOPLE.filter(p=>p.parentIds.includes(d.id));
+  const grandchildren=uniq(children.flatMap(c=>PEOPLE.filter(p=>p.parentIds.includes(c.id))));
+  const greatGC=uniq(grandchildren.flatMap(gc=>PEOPLE.filter(p=>p.parentIds.includes(gc.id))));
+  const siblings=uniq(parents.flatMap(p=>PEOPLE.filter(c=>c.parentIds.includes(p.id)&&c.id!==d.id)));
+  const partner=d.partnerId?byId[d.partnerId]:null;
+  return {greatGP,grandparents,parents,partner,siblings,children,grandchildren,greatGC};
+}
+
+function selectPerson(d){
+  currentPerson=d;
+  const tree=familyTree(d);
+  const householdMates=PEOPLE.filter(p=>p.householdId&&p.householdId===d.householdId&&p.id!==d.id&&p.id!==d.partnerId);
+
+  const related=new Set([d.id,
+    ...tree.greatGP.map(p=>p.id),...tree.grandparents.map(p=>p.id),...tree.parents.map(p=>p.id),
+    ...tree.siblings.map(p=>p.id),...tree.children.map(p=>p.id),
+    ...tree.grandchildren.map(p=>p.id),...tree.greatGC.map(p=>p.id),
+    ...householdMates.map(m=>m.id),...(tree.partner?[tree.partner.id]:[]),
+  ]);
+  CIRCLE_DEFS.forEach(c=>{if(d.circleIds.includes(c.id))PEOPLE.filter(p=>p.circleIds.includes(c.id)).forEach(p=>related.add(p.id));});
+
+  nodeSel.classed("focused",n=>n.id===d.id).classed("dimmed",n=>!related.has(n.id));
+  linkSel.classed("dimmed",l=>!(related.has(l.source.id||l.source)&&related.has(l.target.id||l.target)));
+
+  const circlePills=d.circleIds.map(cid=>{
+    const c=CIRCLE_MAP[cid]||{label:cid,colour:"#666"};
+    return `<span class="info-tag" style="border-color:${c.colour};color:${c.colour}">${c.label}<span class="chip-x" data-rmcircle="${cid}" title="Remove from ${c.label}">×</span></span>`;
+  }).join("");
+
+  function genSection(title,people,icon){
+    if(!people.length)return"";
+    return`<div class="info-section"><h3>${icon} ${title}</h3><ul class="info-list">${
+      people.map(p=>`<li data-id="${p.id}">${p.name}${ageTag(p)}${p.role?` <span style="color:var(--muted);font-size:11px">· ${p.role}</span>`:""}</li>`).join("")
+    }</ul></div>`;
+  }
+
+  // Legacy tags (from old tag column)
+  const tagPills=(d.tags||[]).map(t=>`<span class="info-tag" style="border-color:var(--muted);color:var(--muted)">#${t}</span>`).join("");
+
+  // Story (primary biographical narrative)
+  const storyHTML = `<div class="info-section"><h3>📖 Story <span class="edit-link" data-col="long_text_mm3vwd7g" data-label="Story" data-multi="1">✎</span></h3><div style="font-size:13px;line-height:1.65;white-space:pre-wrap">${d.story?d.story.replace(/\n/g,"<br>"):`<span style="color:var(--muted)">—</span>`}</div></div>`;
+
+  // Bio (Facts) — every row editable in place
+  const factRow=(icon,label,val,col,multi)=>`<div style="margin-top:4px">${icon} <strong>${label}:</strong> ${val?String(val).replace(/\n/g,"<br>"):`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-col="${col}" data-label="${label}" data-multi="${multi?1:0}">✎</span></div>`;
+  const bioBits=[];
+  const _nats=[d.country,d.country2,d.country3].filter(Boolean);
+  bioBits.push(`<div>🌍 <strong>Nationality:</strong> ${_nats.length?`<strong>${_nats.join(" · ")}</strong>`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-nat">✎</span></div>`);
+  if(d.religion)      bioBits.push(`<div>⛪ ${d.religion}</div>`);
+  if(d.school)        bioBits.push(`<div>🎓 ${d.school}${d.schoolYear?` · ${d.schoolYear}`:""}</div>`);
+  if(d.classKid)      bioBits.push(`<div>🧒 Class with our kid: <strong>${d.classKid}</strong></div>`);
+  bioBits.push(factRow("🏷️","Nickname",d.nickname,"text_mm3v9dpn",0));
+  bioBits.push(factRow("🤝","How we met",d.howWeMet,"text_mm3vfnew",0));
+  bioBits.push(factRow("👶","Children notes",d.childrenNotes,"text_mm3vvqwm",0));
+  bioBits.push(factRow("🐾","Pets",d.pets,"text_mm3vyn85",0));
+  bioBits.push(factRow("🥗","Dietary",d.dietary,"text_mm3v898a",0));
+  bioBits.push(factRow("📌","Pinned",d.pinnedNotes,"long_text_mm3vp521",1));
+  bioBits.push(factRow("🎁","Gift ideas",d.giftIdeas,"long_text_mm3vtdth",1));
+  const bioHTML = `<div class="info-section"><h3>Facts</h3><div style="font-size:13px;line-height:1.6">${bioBits.join("")}</div></div>`;
+
+  // Contact info
+  const contactBits=[];
+  if(d.phone)    contactBits.push(`📞 <a href="tel:${d.phone}">${d.phone}</a>`);
+  if(d.email)    contactBits.push(`✉ <a href="mailto:${d.email}">${d.email}</a>`);
+  if(d.location) contactBits.push(`📍 ${d.location}`);
+  const contactHTML = contactBits.length ? `<div class="info-section"><h3>Contact</h3><div style="font-size:12px;line-height:1.8">${contactBits.join("<br>")}</div></div>` : "";
+
+  // Details — editable Role/Closeness/Religion/School/Year/Class/Maiden/Age/Phone/Email/Household
+  const statusRow=(label,val,col,fk)=>`<div style="margin-top:4px"><strong>${label}:</strong> ${val?val:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-status="${col}" data-fkey="${fk}" data-label="${label}">✎</span></div>`;
+  const detailsHTML=`<div class="info-section"><h3>Details</h3><div style="font-size:13px;line-height:1.6">
+    ${statusRow("Role",d.role,"color_mm3vy03m","role")}
+    ${statusRow("Closeness",d.closeness.label,"color_mm3v2ch5","__closeness__")}
+    ${statusRow("Religion / practice",d.religion,"color_mm3vfjet","religion")}
+    ${statusRow("School",d.school,"color_mm3vfwnv","school")}
+    ${statusRow("School year",d.schoolYear,"color_mm3vgj62","schoolYear")}
+    ${statusRow("Class with our kid",d.classKid,"color_mm3vqpx1","classKid")}
+    <div style="margin-top:4px">👰 <strong>Maiden name:</strong> ${d.maidenName?d.maidenName:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-col="text_mm4rgpf" data-label="Maiden name" data-multi="0">✎</span></div>
+    <div style="margin-top:4px"><strong>Age:</strong> ${(d.age!=null&&d.age!=="")?d.age:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-num="numeric_mm3wz3fb" data-label="Age">✎</span></div>
+    <div style="margin-top:4px">📞 ${d.phone?d.phone:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="phone" data-label="Phone">✎</span></div>
+    <div style="margin-top:4px">✉ ${d.email?d.email:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="email" data-label="Email">✎</span></div>
+    <div style="margin-top:4px">🏠 <strong>Household:</strong> ${d.household?d.household:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-household-btn">✎</span></div>
+  </div></div>`;
+
+  const infoEl=document.getElementById("info");
+  infoEl.innerHTML=`<div style="margin-top:10px">
+    <div class="info-photo">${d.photo?`<img src="${d.photo}" onerror="this.parentNode.innerHTML='👤'" alt="">`:"👤"}</div>
+    <div style="text-align:center;margin:-8px 0 10px"><span class="edit-link" id="photo-btn">📷 ${d.photo?'Change':'Add'} photo</span></div>
+    <div class="info-name">${d.name} <span class="edit-link" id="edit-name-btn" title="Edit name" style="font-size:12px">✎</span>${ageOf(d)!=null?` <span style="color:var(--accent);font-size:15px">· ${ageOf(d)} ${ageOf(d)===1?'yr':'yrs'}</span>`:""}${d.nickname?` <span style="color:var(--muted);font-size:14px;font-weight:400">("${d.nickname}")</span>`:""}</div>
+    <div class="info-meta">${[d.role,d.circle.label,d.closeness.label].filter(Boolean).join(" · ")}</div>
+    ${d.household?`<div class="info-meta" style="margin-top:-4px">🏠 ${d.household}</div>`:""}
+    <div class="info-section" style="border-top:none;padding-top:0"><h3>Belongs to <button class="btn-add" id="add-circle-btn" title="Add to a circle">＋</button></h3><div class="info-tags">${circlePills}${tagPills}${(!circlePills&&!tagPills)?'<span style="color:var(--muted);font-size:12px">No circles yet — tap ＋</span>':''}</div></div>
+    ${storyHTML}
+    <div class="info-section"><h3>🧭 How to approach <span class="edit-link" data-col="long_text_mm4r2eg1" data-label="How to approach" data-multi="1">✎</span></h3><div style="font-size:13px;line-height:1.6;white-space:pre-wrap;color:#ecd9a6">${d.howToApproach?d.howToApproach.replace(/\n/g,"<br>"):`<span style="color:var(--muted)">—</span>`}</div></div>
+    <div class="info-section"><h3>💬 Group activity <span class="edit-link" data-col="long_text_mm4rcs0j" data-label="Group activity" data-multi="1">✎</span></h3><div style="font-size:12px;line-height:1.55;white-space:pre-wrap;color:var(--muted)">${d.groupActivity?d.groupActivity.replace(/\n/g,"<br>"):`<span style="color:var(--muted)">—</span>`}</div></div>
+    ${bioHTML}
+    ${detailsHTML}
+    ${genSection("Great-grandparents",tree.greatGP,"⬆")}
+    ${genSection("Grandparents",tree.grandparents,"👴")}
+    ${genSection("Parents",tree.parents,"👨‍👩")}
+    <div class="info-section"><h3>💑 Partner <button class="btn-add" id="edit-partner-btn" title="${tree.partner?'Change partner':'Set partner'}">${tree.partner?'✎':'＋'}</button></h3>${tree.partner?`<ul class="info-list"><li data-id="${tree.partner.id}">${tree.partner.name}</li></ul>`:`<span style="color:var(--muted);font-size:12px">No partner set</span>`}</div>
+    ${genSection("Siblings",tree.siblings,"👫")}
+    ${genSection("Children",tree.children,"👶")}
+    <div style="margin:2px 0 0"><span class="edit-link" id="add-child-btn">👶 ＋ Add a child</span></div>
+    ${genSection("Grandchildren",tree.grandchildren,"🧒")}
+    ${genSection("Great-grandchildren",tree.greatGC,"⬇")}
+    ${householdMates.length?genSection("Also in household",householdMates,"🏠"):""}
+    ${(d.friendsKidsIds||[]).length?genSection("Friend of our kids",(d.friendsKidsIds||[]).map(id=>PEOPLE.find(p=>p.id===id)).filter(Boolean),"⭐"):""}
+    ${contactHTML}
+    <div class="info-section"><h3>📅 Important dates</h3>
+      <div>🎂 Birthday: ${d.birthday?`<strong>${fmtDate(d.birthday)}</strong>${ageOf(d)!=null?` · <span style="color:var(--accent)">${ageOf(d)} ${ageOf(d)===1?'yr':'yrs'}</span>`:""}`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-bday">✎ edit</span></div>
+      <div style="margin-top:5px">💍 Anniversary: ${d.anniversary?`<strong>${fmtDate(d.anniversary)}</strong>${annYears(d.anniversary)!=null?` · <span style="color:var(--accent)">${annYears(d.anniversary)} yrs</span>`:""}`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-anniv">✎ edit</span></div>
+      <div style="margin-top:8px"><a href="https://rezet-global.monday.com/boards/${CONTACTS_BOARD}/pulses/${d.id}" target="_blank" style="font-size:12px">Open in Monday →</a></div>
+    </div>
+  </div>`;
+
+  infoEl.querySelectorAll("li[data-id]").forEach(li=>{
+    li.addEventListener("click",()=>{const t=PEOPLE.find(p=>p.id==li.dataset.id);if(t)selectPerson(t);});
+  });
+  // Interactive controls
+  const acb=document.getElementById("add-circle-btn"); if(acb)acb.addEventListener("click",()=>openCirclePicker(d));
+  infoEl.querySelectorAll("[data-rmcircle]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();removeCircleFromContact(d.id,x.dataset.rmcircle);}));
+  const eb=document.getElementById("edit-bday"); if(eb)eb.addEventListener("click",()=>editDate(d,"date_mm03gvpg",d.birthday));
+  const ea=document.getElementById("edit-anniv"); if(ea)ea.addEventListener("click",()=>editDate(d,"date_mm4rwpfj",d.anniversary));
+  const en=document.getElementById("edit-nat"); if(en)en.addEventListener("click",()=>editNationality(d));
+  const pb=document.getElementById("photo-btn"); if(pb)pb.addEventListener("click",()=>pickPhoto(d));
+  const epb=document.getElementById("edit-partner-btn"); if(epb)epb.addEventListener("click",()=>openContactPicker({title:`Set ${d.name}'s partner`,excludeIds:[d.id],onPick:id=>setPartner(d.id,id)}));
+  const acb2=document.getElementById("add-child-btn"); if(acb2)acb2.addEventListener("click",()=>openContactPicker({title:`Add a child to ${d.name}`,excludeIds:[d.id,...(d.childrenIds||[])],onPick:id=>addChild(d.id,id)}));
+  infoEl.querySelectorAll("[data-col]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();editText(d,x.dataset.col,x.dataset.label,x.dataset.multi==="1");}));
+  infoEl.querySelectorAll("[data-status]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();editStatus(d,x.dataset.status,x.dataset.fkey,x.dataset.label);}));
+  infoEl.querySelectorAll("[data-num]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();editNumber(d,x.dataset.num,x.dataset.label);}));
+  infoEl.querySelectorAll("[data-contact]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();editContact(d,x.dataset.contact,x.dataset.label);}));
+  const ehb=document.getElementById("edit-household-btn"); if(ehb)ehb.addEventListener("click",()=>editHousehold(d));
+  const enb2=document.getElementById("edit-name-btn"); if(enb2)enb2.addEventListener("click",()=>editName(d));
+}
+
+// ── UI WIRING ─────────────────────────────────────────────────────────
+function buildFilters(){
+  const el=document.getElementById("circle-filters"); el.innerHTML="";
+  const all=[...CIRCLE_DEFS,FALLBACK];
+  all.forEach(c=>{
+    // MEMBERSHIP count: how many people belong to this circle (not just primary).
+    const count = c.id==="__none__"
+      ? PEOPLE.filter(p=>!p.circleIds || !p.circleIds.length).length
+      : PEOPLE.filter(p=>(p.circleIds||[]).includes(c.id)).length;
+    if(!count)return;
+    const row=document.createElement("div"); row.className="filter-row";
+    const checked = state.visibleCircleIds.has(c.id) ? "checked" : "";
+    const addBtn = c.id==="__none__" ? "" : `<button class="btn-add" title="Add a member to ${c.label}">＋</button>`;
+    row.innerHTML=`<input type="checkbox" ${checked} data-cid="${c.id}"> <span class="swatch" style="background:${c.colour}"></span> <span>${c.label}</span> <span class="count">${count}</span> ${addBtn}`;
+    el.appendChild(row);
+    row.querySelector("input").addEventListener("change",e=>{
+      if(e.target.checked)state.visibleCircleIds.add(c.id);
+      else state.visibleCircleIds.delete(c.id);
+      renderGraph();
+    });
+    const ab=row.querySelector(".btn-add");
+    if(ab) ab.addEventListener("click",ev=>{ ev.stopPropagation();
+      openContactPicker({ title:`Add a member to ${c.label}`,
+        excludeIds: PEOPLE.filter(p=>(p.circleIds||[]).includes(c.id)).map(p=>p.id),
+        onPick: id=>addCircleToContact(id, c.id) });
+    });
+  });
+  buildPropertyFilter("vocation-filters","religion","visibleVocations");
+  buildPropertyFilter("country-filters", "country", "visibleCountries");
+  buildPropertyFilter("school-filters", "school", "visibleSchools");
+  buildPropertyFilter("class-filters", "classKid", "visibleClasses");
+}
+
+// All / None shortcuts for the circle membership filter
+document.getElementById("circles-all").addEventListener("click",()=>{
+  state.visibleCircleIds = new Set([...CIRCLE_DEFS.map(c=>c.id),"__none__"]);
+  buildFilters(); renderGraph();
+});
+document.getElementById("circles-none").addEventListener("click",()=>{
+  state.visibleCircleIds = new Set();
+  buildFilters(); renderGraph();
+});
+
+function buildPropertyFilter(elId, propKey, stateKey) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = "";
+  const counts = {};
+  PEOPLE.forEach(p => {
+    const vals = propKey==="country" ? [p.country,p.country2,p.country3].filter(Boolean) : [p[propKey]];
+    if(!vals.length) vals.push("—");
+    vals.forEach(v => { const k=v||"—"; counts[k] = (counts[k] || 0) + 1; });
+  });
+  // Sort: defined values first, "—" last
+  const keys = Object.keys(counts).sort((a,b) => {
+    if (a === "—") return 1;
+    if (b === "—") return -1;
+    return counts[b] - counts[a];
+  });
+  // Preserve any prior selection (so rebuilding one filter doesn't wipe the others);
+  // first build starts with everything ticked.
+  const prior = state[stateKey];
+  const hadPrior = prior && prior.size >= 0 && prior.__init;
+  state[stateKey] = new Set(hadPrior ? keys.filter(k=>prior.has(k)) : keys);
+  state[stateKey].__init = true;
+  keys.forEach(k => {
+    const row = document.createElement("div");
+    row.className = "filter-row";
+    const checked = state[stateKey].has(k) ? "checked" : "";
+    row.innerHTML = `<input type="checkbox" ${checked} data-key="${k}"> <span>${k}</span> <span class="count">${counts[k]}</span>`;
+    el.appendChild(row);
+    row.querySelector("input").addEventListener("change", e => {
+      if (e.target.checked) state[stateKey].add(k);
+      else state[stateKey].delete(k);
+      renderGraph();
+    });
+  });
+}
+
+document.querySelectorAll("[data-mode]").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll("[data-mode]").forEach(b=>b.classList.remove("on"));
+    btn.classList.add("on"); state.groupMode=btn.dataset.mode; renderGraph();
+  });
+});
+document.querySelectorAll("[data-link]").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    btn.classList.toggle("on"); const t=btn.dataset.link;
+    if(t==="household")state.showHousehold=btn.classList.contains("on");
+    if(t==="partner")  state.showPartner  =btn.classList.contains("on");
+    if(t==="circle")   state.showCircle   =btn.classList.contains("on");
+    if(t==="parent")   state.showParent   =btn.classList.contains("on");
+    renderGraph();
+  });
+});
+document.getElementById("re-centre").addEventListener("click",()=>{PEOPLE.forEach(p=>{p.fx=null;p.fy=null;});simulation.alpha(1).restart();});
+document.getElementById("freeze").addEventListener("click",e=>{
+  state.frozen=!state.frozen; e.target.classList.toggle("on");
+  if(state.frozen)PEOPLE.forEach(p=>{if(p.x!==undefined){p.fx=p.x;p.fy=p.y;}});
+  else PEOPLE.forEach(p=>{p.fx=null;p.fy=null;});
+});
+document.getElementById("search").addEventListener("input",e=>{
+  const q=e.target.value.toLowerCase().trim();
+  if(!q){nodeSel?.classed("dimmed",false);linkSel?.classed("dimmed",false);return;}
+  const mids=new Set(PEOPLE.filter(p=>p.name.toLowerCase().includes(q)).map(p=>p.id));
+  nodeSel?.classed("dimmed",d=>!mids.has(d.id));
+  linkSel?.classed("dimmed",l=>!mids.has(l.source.id||l.source)&&!mids.has(l.target.id||l.target));
+  if(mids.size===1)selectPerson(PEOPLE.find(p=>mids.has(p.id)));
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────
+// STATIC by design: render the embedded snapshot once and leave it alone. Nothing
+// fetches or re-renders on its own — so the view can never move or "revert" while you
+// look at it. Press "↻ Refresh from Monday" in the sidebar to pull the latest on demand.
+document.getElementById("subtitle").textContent=`Relationship map · ${PEOPLE.length} souls`;
+document.getElementById("stamp").innerHTML=
+  `Snapshot: <strong>${GENERATED_AT}</strong> <span id="refresh-status" style="color:var(--muted)">· press ↻ to update</span>`;
+buildFilters();
+if(PEOPLE.length) renderGraph();
+else document.getElementById("stats").textContent="Loading from Supabase…";
+// refreshFromMonday() is called at the very end, after SUPA/helpers are defined (avoids TDZ).
+
+// ── DATA: Supabase backend ────────────────────────────────────────────
+const SUPA = { url:"https://jyrmfnrusrnhekksitkm.supabase.co", key:"sb_publishable_X-IX9YB14zm9rSUanq0b7w_n28vb06W" };
+let AUTH_TOKEN=null;
+const sbH = ()=>({apikey:SUPA.key, Authorization:"Bearer "+(AUTH_TOKEN||SUPA.key), "Content-Type":"application/json"});
+async function sbGet(path){ const r=await fetch(`${SUPA.url}/rest/v1/${path}`,{headers:sbH()}); if(!r.ok)throw new Error("GET "+path+" "+r.status); return r.json(); }
+async function sbPatch(table,col,val,body){ const r=await fetch(`${SUPA.url}/rest/v1/${table}?${col}=eq.${val}`,{method:"PATCH",headers:{...sbH(),Prefer:"return=minimal"},body:JSON.stringify(body)}); if(!r.ok)throw new Error("PATCH "+(await r.text())); }
+async function sbInsert(table,rows,prefer){ const r=await fetch(`${SUPA.url}/rest/v1/${table}`,{method:"POST",headers:{...sbH(),Prefer:prefer||"return=minimal"},body:JSON.stringify(rows)}); if(!r.ok)throw new Error("POST "+(await r.text())); }
+async function sbDelete(table,query){ const r=await fetch(`${SUPA.url}/rest/v1/${table}?${query}`,{method:"DELETE",headers:sbH()}); if(!r.ok)throw new Error("DELETE "+(await r.text())); }
+const ROLE_LABELS=["Parent","Child","Single","Priest / Religious","Other"];
+const M2S={ "text_mm3v9dpn":"nickname","text_mm4rgpf":"maiden_name","text_mm3vfnew":"how_we_met",
+ "text_mm3vvqwm":"children_notes","text_mm3vyn85":"pets","text_mm3v898a":"dietary",
+ "long_text_mm3vp521":"pinned_notes","long_text_mm3vwd7g":"story","long_text_mm3vtdth":"gift_ideas",
+ "long_text_mm4r2eg1":"how_to_approach","long_text_mm4rcs0j":"group_activity",
+ "date_mm03gvpg":"birthday","date_mm4rwpfj":"anniversary",
+ "color_mm3vy03m":"role","color_mm3vq7cr":"country","color_mm4rv9qa":"country2","color_mm4r6e3g":"country3",
+ "color_mm3vfjet":"religion","color_mm3vfwnv":"school","color_mm3vgj62":"school_year","color_mm3vqpx1":"class_kid",
+ "color_mm3v2ch5":"__closeness__","numeric_mm3wz3fb":"age","phone":"phone","email":"email","name":"name" };
+function m2sVal(v){
+  if(typeof v==="string") return v||null;
+  if(v && typeof v==="object"){
+    if(Object.keys(v).length===0) return null;
+    if(v.date!==undefined) return v.date||null;
+    if(v.text!==undefined) return v.text||null;
+    if(v.label!==undefined) return v.label||null;
+    if(v.index!==undefined) return ROLE_LABELS[v.index]||null;
+    if(v.phone!==undefined) return v.phone||null;
+    if(v.email!==undefined) return v.email||null;
+  }
+  return v==null?null:v;
+}
+// Old setters still call mondayWrite(id, mondayShapedPayload); translate it to a Supabase PATCH on contacts.
+async function mondayWrite(itemId, columnValues){
+  const patch={};
+  for(const [cid,val] of Object.entries(columnValues)){
+    const col=M2S[cid]; if(!col) continue;
+    if(col==="__closeness__"){ const lbl=(val&&val.label)||null; const m=(lbl||"").match(/\((\d+)\)/);
+      patch.closeness_label=lbl?lbl.split(" (")[0]:null; patch.closeness_tier=m?parseInt(m[1]):null; }
+    else if(col==="age"){ const x=m2sVal(val); patch.age=(x!==null&&x!=="")?parseInt(x):null; }
+    else if(col==="name"){ patch.name=val; }
+    else patch[col]=m2sVal(val);
+  }
+  await sbPatch("contacts","id",itemId,patch); return {id:itemId};
+}
+
+async function _deadFetchMonday(){
+  const QUERY = `{
+    contacts: boards(ids: [18408024949]) {
+      items_page(limit: 200) {
+        items {
+          id name group { title }
+          column_values(ids:["file_mm03294j","color_mm3v2ch5","color_mm3vy03m","board_relation_mm3vjwp4","board_relation_mm3vwx29","board_relation_mm3vkz68","board_relation_mm3vwz0j","board_relation_mm3vpwm7","board_relation_mm3vr0mt","date_mm03gvpg","date_mm4rwpfj","tag_mm065ctw","text_mm3v9dpn","text_mm4rgpf","text_mm3vfnew","long_text_mm3vp521","long_text_mm3vtdth","long_text_mm3vwd7g","long_text_mm4r2eg1","long_text_mm4rcs0j","text_mm3vvqwm","text_mm3vyn85","text_mm3v898a","color_mm3vfwnv","color_mm3vgj62","color_mm3vqpx1","color_mm3vq7cr","color_mm4rv9qa","color_mm4r6e3g","color_mm3vfjet","numeric_mm3wz3fb","phone","email","location_mm217myq","location_mm3vy60a"]) {
+            id type text value
+            ... on StatusValue { label }
+            ... on BoardRelationValue { linked_item_ids display_value }
+            ... on DateValue { date }
+          }
+        }
+      }
+    }
+    families: boards(ids: [18415541972]) { items_page(limit: 50) { items { id name } } }
+  }`;
+  const r = await fetch("https://api.monday.com/v2",{
+    method:"POST",
+    headers:{Authorization:MONDAY_TOKEN,"Content-Type":"application/json"},
+    body:JSON.stringify({query:QUERY}),
+  });
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function transformFresh(data){
+  const families = {};
+  for(const f of data.data.families[0].items_page.items)
+    families[f.id] = f.name;
+  // Status reader: Monday returns a DEFAULT label when value is null, so only trust
+  // a status label when value is actually set. Without this, every contact gets the
+  // first label of each column (University / Vietnam / Year 4 …) — the "reverts to old" bug.
+  const status = c => (c && c.value != null && c.value !== "null" && c.value !== "") ? (c.label || c.text || null) : null;
+  return data.data.contacts[0].items_page.items.map(item=>{
+    const cv = Object.fromEntries(item.column_values.map(c=>[c.id,c]));
+    const photo = cv["file_mm03294j"]?.text?.startsWith("http") ? cv["file_mm03294j"].text : null;
+    const cl = status(cv["color_mm3v2ch5"]) || "";
+    const tier = cl.includes("5)")?5: cl.includes("15)")?15: cl.includes("50)")?50: 150;
+    const circleIds = cv["board_relation_mm3vkz68"]?.linked_item_ids || [];
+    const primary = CIRCLE_DEFS.find(c=>circleIds.includes(c.id)) || FALLBACK;
+    const hhId = cv["board_relation_mm3vwx29"]?.linked_item_ids?.[0] || null;
+    return {
+      id: parseInt(item.id), name: item.name, group: item.group.title, photo,
+      household: hhId ? families[hhId] || null : null,
+      householdId: hhId ? parseInt(hhId) : null,
+      partnerId: parseInt(cv["board_relation_mm3vjwp4"]?.linked_item_ids?.[0]) || null,
+      circleIds,
+      parentIds: (cv["board_relation_mm3vwz0j"]?.linked_item_ids || []).map(Number),
+      childrenIds: (cv["board_relation_mm3vpwm7"]?.linked_item_ids || []).map(Number),
+      friendsKidsIds: (cv["board_relation_mm3vr0mt"]?.linked_item_ids || []).map(Number),
+      role: status(cv["color_mm3vy03m"]),
+      birthday: cv["date_mm03gvpg"]?.date || null,
+      anniversary: cv["date_mm4rwpfj"]?.date || null,
+      age: (cv["numeric_mm3wz3fb"]?.text!=null && cv["numeric_mm3wz3fb"]?.text!=="") ? parseInt(cv["numeric_mm3wz3fb"].text) : null,
+      circle: primary, closeness: {tier, label: cl.split(" (")[0] || "Extended"},
+      nickname: cv["text_mm3v9dpn"]?.text || null,
+      maidenName: cv["text_mm4rgpf"]?.text || null,
+      howWeMet: cv["text_mm3vfnew"]?.text || null,
+      pinnedNotes: cv["long_text_mm3vp521"]?.text || null,
+      giftIdeas: cv["long_text_mm3vtdth"]?.text || null,
+      story: cv["long_text_mm3vwd7g"]?.text || null,
+      howToApproach: cv["long_text_mm4r2eg1"]?.text || null,
+      groupActivity: cv["long_text_mm4rcs0j"]?.text || null,
+      childrenNotes: cv["text_mm3vvqwm"]?.text || null,
+      pets: cv["text_mm3vyn85"]?.text || null,
+      dietary: cv["text_mm3v898a"]?.text || null,
+      tags: (cv["tag_mm065ctw"]?.text || "").split(",").map(t=>t.trim()).filter(Boolean),
+      phone: cv["phone"]?.text || null,
+      email: cv["email"]?.text || null,
+      location: cv["location_mm217myq"]?.text || cv["location_mm3vy60a"]?.text || null,
+      school: status(cv["color_mm3vfwnv"]),
+      schoolYear: status(cv["color_mm3vgj62"]),
+      classKid: status(cv["color_mm3vqpx1"]),
+      country: status(cv["color_mm3vq7cr"]),
+      country2: status(cv["color_mm4rv9qa"]),
+      country3: status(cv["color_mm4r6e3g"]),
+      religion: status(cv["color_mm3vfjet"]),
+    };
+  });
+}
+
+// MANUAL refresh only — runs ONLY when you click "↻ Refresh from Monday".
+// The page never re-renders on its own, so it can never "revert" while you're looking at it.
+// Load everything live from Supabase and rebuild PEOPLE + CIRCLE_DEFS.
+async function refreshFromMonday(){
+  const rs=document.getElementById("refresh-status"), btn=document.getElementById("refresh-btn");
+  if(rs){ rs.textContent="· loading…"; rs.style.color="var(--accent)"; }
+  if(btn){ btn.textContent="↻ Loading…"; btn.disabled=true; }
+  try{
+    const [contacts,circles,families,cc,pc,fwk]=await Promise.all([
+      sbGet("contacts?select=*"), sbGet("circles?select=*"), sbGet("families?select=*"),
+      sbGet("contact_circles?select=contact_id,circle_id"),
+      sbGet("parent_child?select=parent_id,child_id"),
+      sbGet("friends_with_kids?select=contact_id,kid_id") ]);
+    circles.forEach(c=>{ const id=String(c.id);
+      if(!CIRCLE_MAP[id]){ const def={id,label:c.name,colour:c.colour||"#5a6270"}; CIRCLE_DEFS.push(def); CIRCLE_MAP[id]=def; state.visibleCircleIds.add(id); }
+      else { CIRCLE_MAP[id].label=c.name; if(c.colour)CIRCLE_MAP[id].colour=c.colour; } });
+    const fam=Object.fromEntries(families.map(f=>[f.id,f.name]));
+    const circOf={}; cc.forEach(r=>{ (circOf[r.contact_id]=circOf[r.contact_id]||[]).push(String(r.circle_id)); });
+    const kidsOf={}, parsOf={}; pc.forEach(r=>{ (kidsOf[r.parent_id]=kidsOf[r.parent_id]||[]).push(r.child_id); (parsOf[r.child_id]=parsOf[r.child_id]||[]).push(r.parent_id); });
+    const fkOf={}; fwk.forEach(r=>{ (fkOf[r.contact_id]=fkOf[r.contact_id]||[]).push(r.kid_id); });
+    const fresh=contacts.map(c=>{
+      const circleIds=circOf[c.id]||[]; const primary=CIRCLE_DEFS.find(d=>circleIds.includes(d.id))||FALLBACK;
+      return { id:c.id, name:c.name, group:null, photo:c.photo_url||null,
+        household:c.household_id?fam[c.household_id]||null:null, householdId:c.household_id||null,
+        partnerId:c.partner_id||null, circleIds, parentIds:parsOf[c.id]||[], childrenIds:kidsOf[c.id]||[], friendsKidsIds:fkOf[c.id]||[],
+        role:c.role, birthday:c.birthday, anniversary:c.anniversary, age:c.age,
+        circle:primary, closeness:{tier:c.closeness_tier||150, label:c.closeness_label||"Extended"},
+        nickname:c.nickname, maidenName:c.maiden_name, howWeMet:c.how_we_met, pinnedNotes:c.pinned_notes,
+        giftIdeas:c.gift_ideas, story:c.story, howToApproach:c.how_to_approach, groupActivity:c.group_activity,
+        childrenNotes:c.children_notes, pets:c.pets, dietary:c.dietary, tags:[],
+        phone:c.phone, email:c.email, location:c.address,
+        school:c.school, schoolYear:c.school_year, classKid:c.class_kid,
+        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion };
+    });
+    const byId=Object.fromEntries(fresh.map(p=>[p.id,p]));
+    for(const p of fresh){ if(p.partnerId&&byId[p.partnerId]){ const q=byId[p.partnerId]; const best=Math.min(p.closeness.tier,q.closeness.tier); const lbl=p.closeness.tier===best?p.closeness.label:q.closeness.label; p.closeness=q.closeness={tier:best,label:lbl}; } }
+    PEOPLE.length=0; fresh.forEach(p=>PEOPLE.push(p));
+    document.getElementById("subtitle").textContent=`Relationship map · ${PEOPLE.length} souls · Supabase`;
+    if(rs){ rs.textContent=`· live ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`; }
+    buildFilters(); renderGraph();
+  }catch(err){ if(rs){ rs.textContent="· load failed"; rs.style.color="var(--muted)"; } console.warn("Supabase load failed:",err); }
+  finally{ if(btn){ btn.textContent="↻ Refresh"; btn.disabled=false; } }
+}
+document.getElementById("refresh-btn").addEventListener("click", refreshFromMonday);
+// ── AUTH GATE — Supabase + Google, restricted to two accounts ──────────
+const ALLOW=["santi@parsons-aubone.com","cinthia@parsons-aubone.com"];
+(function injectGateStyle(){ const s=document.createElement("style"); s.textContent=`
+#auth-gate{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--bg,#0d0f12)}
+#auth-gate .gc{background:var(--panel,#16191f);border:1px solid var(--border,#262b33);border-radius:16px;padding:42px 36px;max-width:360px;width:90%;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+#auth-gate .gt{font-size:27px;font-weight:700;color:var(--text,#e8eaed);letter-spacing:.4px}
+#auth-gate .gs{font-size:13px;color:var(--muted,#9aa0a6);margin:10px 0 26px;line-height:1.5}
+#auth-gate .gb{display:inline-flex;align-items:center;gap:10px;background:#fff;color:#1f1f1f;border:none;border-radius:9px;padding:12px 18px;font-size:14px;font-weight:600;cursor:pointer;width:100%;justify-content:center}
+#auth-gate .gb:hover{background:#f1f3f4}
+#auth-gate .gf{font-size:11px;color:var(--muted,#9aa0a6);margin-top:20px}
+#signout-btn{position:fixed;bottom:14px;right:14px;z-index:9998;background:var(--panel,#16191f);color:var(--muted,#9aa0a6);border:1px solid var(--border,#262b33);border-radius:20px;padding:6px 13px;font-size:12px;cursor:pointer}
+#signout-btn:hover{color:var(--text,#e8eaed)}
+`; document.head.appendChild(s); })();
+const _GOOGLE_SVG='<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.6 2.4 30.1 0 24 0 14.6 0 6.4 5.4 2.5 13.3l7.9 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.2-3.9 6.6-9.6 6.6-16.5z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.1 0 11.3-2 15-5.5l-7.1-5.5c-2 1.3-4.5 2.1-7.9 2.1-6.3 0-11.7-3.7-13.6-9.1l-7.9 6.1C6.4 42.6 14.6 48 24 48z"/></svg>';
+const _sbAuth=window.supabase.createClient(SUPA.url, SUPA.key);
+function showGate(msg){
+  let g=document.getElementById("auth-gate");
+  if(!g){ g=document.createElement("div"); g.id="auth-gate"; document.body.appendChild(g); }
+  g.innerHTML=`<div class="gc"><div class="gt">The Joneses</div><div class="gs">${msg||"Private relationship map.<br>Sign in to continue."}</div><button id="gate-google" class="gb">${_GOOGLE_SVG}<span>Continue with Google</span></button><div class="gf">Access is limited to authorised accounts.</div></div>`;
+  g.style.display="flex";
+  document.getElementById("gate-google").onclick=()=>_sbAuth.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.origin+location.pathname}});
+}
+function hideGate(){ const g=document.getElementById("auth-gate"); if(g)g.style.display="none"; }
+function addSignOut(email){
+  let b=document.getElementById("signout-btn");
+  if(!b){ b=document.createElement("button"); b.id="signout-btn"; document.body.appendChild(b); }
+  b.textContent="⏻ "+email.split("@")[0]; b.title="Signed in as "+email+" — sign out";
+  b.onclick=async()=>{ await _sbAuth.auth.signOut(); location.reload(); };
+}
+let _authBooted=false;
+async function _gateApply(session){
+  if(session && session.access_token){
+    const email=(session.user.email||"").toLowerCase();
+    if(!ALLOW.includes(email)){ await _sbAuth.auth.signOut(); AUTH_TOKEN=null; showGate("That account isn't authorised for The Joneses."); return; }
+    AUTH_TOKEN=session.access_token;
+    if(!_authBooted){ _authBooted=true; hideGate(); addSignOut(email); refreshFromMonday(); }
+  } else { AUTH_TOKEN=null; if(!_authBooted) showGate(); }
+}
+_sbAuth.auth.onAuthStateChange((_e,s)=>_gateApply(s));
+_sbAuth.auth.getSession().then(({data})=>_gateApply(data.session));
+
+// ── INTERACTIVE EDIT + WRITE-BACK ─────────────────────────────────────
+function toast(msg, isErr){
+  let t=document.getElementById("toast");
+  if(!t){ t=document.createElement("div"); t.id="toast"; document.body.appendChild(t); }
+  t.textContent=msg; t.className="toast show"+(isErr?" err":"");
+  clearTimeout(t._h); t._h=setTimeout(()=>{t.className="toast"+(isErr?" err":"");},2600);
+}
+
+// Hover mini-card
+let _mc;
+function miniCardEl(){ if(!_mc){_mc=document.createElement("div");_mc.className="minicard";document.body.appendChild(_mc);} return _mc; }
+function showMiniCard(e,d){
+  const el=miniCardEl();
+  const sub=[d.role,d.circle.label].filter(Boolean).join(" · ");
+  const extra=[];
+  if(ageOf(d)!=null) extra.push(`${ageOf(d)} yrs`);
+  if(d.household) extra.push("🏠 "+d.household);
+  if(d.birthday) extra.push("🎂 "+fmtDate(d.birthday));
+  el.innerHTML=`${d.photo?`<img class="mc-photo" src="${d.photo}" onerror="this.style.display='none'">`:""}<div class="mc-name">${d.name}${d.nickname?` <span style="color:var(--muted);font-weight:400">"${d.nickname}"</span>`:""}</div><div class="mc-meta">${sub}${extra.length?"<br>"+extra.join(" · "):""}</div><div style="clear:both"></div>`;
+  moveMiniCard(e); el.classList.add("show");
+}
+function moveMiniCard(e){ const el=miniCardEl(); let x=e.clientX+16,y=e.clientY+16; if(x+224>innerWidth)x=e.clientX-228; if(y+96>innerHeight)y=e.clientY-104; el.style.left=x+"px"; el.style.top=y+"px"; }
+function hideMiniCard(){ if(_mc)_mc.classList.remove("show"); }
+
+// Searchable contact picker (used by circle "+")
+function openContactPicker({title, excludeIds=[], onPick}){
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  const ex=new Set(excludeIds.map(Number));
+  const pool=PEOPLE.filter(p=>!ex.has(p.id)).sort((a,b)=>a.name.localeCompare(b.name));
+  ov.innerHTML=`<div class="picker"><div class="picker-head"><h3>${title}</h3><input type="search" placeholder="Search a name…" id="pk-search"></div><div class="picker-list" id="pk-list"></div><div class="picker-foot"><button class="toggle" id="pk-close">Close</button></div></div>`;
+  document.body.appendChild(ov);
+  const list=ov.querySelector("#pk-list"), search=ov.querySelector("#pk-search");
+  function draw(q){
+    const f=q?pool.filter(p=>(p.name+" "+(p.nickname||"")).toLowerCase().includes(q.toLowerCase())):pool;
+    list.innerHTML=f.slice(0,80).map(p=>`<div class="picker-item" data-id="${p.id}"><span class="pi-dot" style="background:${p.circle.colour}"></span><span>${p.name}</span><span class="pi-sub">${p.household||p.role||""}</span></div>`).join("")||`<div style="padding:14px;color:var(--muted)">No matches.</div>`;
+    list.querySelectorAll(".picker-item").forEach(it=>it.addEventListener("click",async()=>{ ov.remove(); await onPick(Number(it.dataset.id)); }));
+  }
+  search.addEventListener("input",()=>draw(search.value));
+  ov.querySelector("#pk-close").addEventListener("click",()=>ov.remove());
+  ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+  draw(""); search.focus();
+}
+
+// Circle picker (used by person panel "+")
+function openCirclePicker(person){
+  const inIds=new Set((person.circleIds||[]).map(String));
+  const avail=CIRCLE_DEFS.filter(c=>!inIds.has(c.id));
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker"><div class="picker-head"><h3>Add ${person.name} to a circle</h3><input type="search" placeholder="Filter, or type a new circle name…" id="cp-s"></div><div class="picker-list" id="cp-l"></div><div class="picker-foot"><button class="toggle" id="cp-x">Close</button></div></div>`;
+  document.body.appendChild(ov);
+  const l=ov.querySelector("#cp-l"), s=ov.querySelector("#cp-s");
+  function draw(q){
+    const qt=q.trim();
+    const f=qt?avail.filter(c=>c.label.toLowerCase().includes(qt.toLowerCase())):avail;
+    let html=f.map(c=>`<div class="picker-item" data-cid="${c.id}"><span class="pi-dot" style="background:${c.colour}"></span><span>${c.label}</span></div>`).join("");
+    const exact=CIRCLE_DEFS.some(c=>c.label.toLowerCase()===qt.toLowerCase());
+    if(qt && !exact) html+=`<div class="picker-item" data-create="${esc(qt)}"><span class="pi-dot" style="background:var(--accent)"></span><span>＋ Create "<strong>${esc(qt)}</strong>" as a new circle</span></div>`;
+    l.innerHTML=html||`<div style="padding:14px;color:var(--muted)">Type a name to create a new circle.</div>`;
+    l.querySelectorAll(".picker-item[data-cid]").forEach(it=>it.addEventListener("click",async()=>{ ov.remove(); await addCircleToContact(person.id, it.dataset.cid); }));
+    const cr=l.querySelector(".picker-item[data-create]");
+    if(cr) cr.addEventListener("click",async()=>{ ov.remove(); try{ const def=await createCircle(cr.dataset.create); await addCircleToContact(person.id, def.id); }catch(err){ toast("Couldn't create circle",true); console.warn(err); } });
+  }
+  s.addEventListener("input",()=>draw(s.value)); ov.querySelector("#cp-x").addEventListener("click",()=>ov.remove());
+  ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();}); draw(""); s.focus();
+}
+
+// Add / remove a circle on a contact (writes the contact-side Circles column)
+async function addCircleToContact(contactId, circleId){
+  const p=PEOPLE.find(x=>x.id===contactId); if(!p)return;
+  try{
+    await sbInsert("contact_circles",[{contact_id:contactId,circle_id:Number(circleId)}],"resolution=ignore-duplicates,return=minimal");
+    p.circleIds=[...new Set([...(p.circleIds||[]).map(String),String(circleId)])]; p.circle=CIRCLE_DEFS.find(c=>p.circleIds.includes(c.id))||FALLBACK;
+    toast(`Added ${p.name} to ${(CIRCLE_MAP[String(circleId)]||{}).label||"circle"}`);
+    buildFilters(); renderGraph(); if(currentPerson&&currentPerson.id===contactId)selectPerson(p);
+  }catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+async function removeCircleFromContact(contactId, circleId){
+  const p=PEOPLE.find(x=>x.id===contactId); if(!p)return;
+  try{
+    await sbDelete("contact_circles",`contact_id=eq.${contactId}&circle_id=eq.${Number(circleId)}`);
+    p.circleIds=(p.circleIds||[]).map(String).filter(id=>id!==String(circleId)); p.circle=CIRCLE_DEFS.find(c=>p.circleIds.includes(c.id))||FALLBACK;
+    toast(`Removed ${p.name} from circle`);
+    buildFilters(); renderGraph(); if(currentPerson&&currentPerson.id===contactId)selectPerson(p);
+  }catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+
+// Edit a date column (birthday / anniversary) with write-back
+async function setContactDate(contactId, columnId, value){
+  const p=PEOPLE.find(x=>x.id===contactId); if(!p)return;
+  try{
+    await mondayWrite(contactId,{[columnId]: value?{date:value}:{}});
+    if(columnId==="date_mm03gvpg")p.birthday=value||null;
+    if(columnId==="date_mm4rwpfj")p.anniversary=value||null;
+    toast("Saved ✓"); if(currentPerson&&currentPerson.id===contactId)selectPerson(p);
+  }catch(err){ toast("Couldn't save to Monday",true); console.warn(err); }
+}
+// Edit nationality (primary + dual) with write-back to two status columns
+async function setNationality(contactId, primary, second, third){
+  const p=PEOPLE.find(x=>x.id===contactId); if(!p)return;
+  const vals={ "color_mm3vq7cr": primary?{label:primary}:{}, "color_mm4rv9qa": second?{label:second}:{}, "color_mm4r6e3g": third?{label:third}:{} };
+  try{
+    await mondayWrite(contactId, vals, ",create_labels_if_missing:true");
+    p.country=primary||null; p.country2=second||null; p.country3=third||null;
+    toast("Saved ✓"); buildFilters(); renderGraph(); if(currentPerson&&currentPerson.id===contactId)selectPerson(p);
+  }catch(err){ toast("Couldn't save to Monday",true); console.warn(err); }
+}
+function editNationality(person){
+  const opts=v=>NATION_LABELS.map(l=>`<option value="${l}" ${v===l?"selected":""}>${l}</option>`).join("");
+  const sel='width:100%;padding:7px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px';
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:320px"><div class="picker-head"><h3>🌍 Nationality — ${person.name}</h3>
+    <div style="font-size:12px;color:var(--muted);margin:4px 0">Primary</div>
+    <select id="nat1" style="${sel};margin-bottom:8px"><option value="">—</option>${opts(person.country)}</select>
+    <div style="font-size:12px;color:var(--muted);margin:0 0 4px">Second (dual)</div>
+    <select id="nat2" style="${sel};margin-bottom:8px"><option value="">—</option>${opts(person.country2)}</select>
+    <div style="font-size:12px;color:var(--muted);margin:0 0 4px">Third</div>
+    <select id="nat3" style="${sel}"><option value="">—</option>${opts(person.country3)}</select></div>
+    <div class="picker-foot"><button class="toggle" id="n-cancel">Cancel</button> <button class="toggle on" id="n-save">Save</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector("#n-save").addEventListener("click",async()=>{ const a=ov.querySelector("#nat1").value, b=ov.querySelector("#nat2").value, c=ov.querySelector("#nat3").value; ov.remove(); await setNationality(person.id, a||null, b||null, c||null); });
+  ov.querySelector("#n-cancel").addEventListener("click",()=>ov.remove());
+  ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+function editDate(person, columnId, currentVal){
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  const isBd=columnId==="date_mm03gvpg";
+  ov.innerHTML=`<div class="picker" style="width:300px"><div class="picker-head"><h3>${isBd?"🎂 Birthday":"💍 Anniversary"} — ${person.name}</h3>
+    <input type="date" id="d-in" value="${currentVal||""}"><div style="font-size:11px;color:var(--muted);margin-top:6px">Pick a real year for an auto-updating age/count, or leave a placeholder year for day-only.</div></div>
+    <div class="picker-foot"><button class="toggle" id="d-clear" style="float:left">Clear</button><button class="toggle" id="d-cancel">Cancel</button> <button class="toggle on" id="d-save">Save</button></div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector("#d-in");
+  ov.querySelector("#d-save").addEventListener("click",async()=>{ ov.remove(); await setContactDate(person.id,columnId,inp.value||null); });
+  ov.querySelector("#d-clear").addEventListener("click",async()=>{ ov.remove(); await setContactDate(person.id,columnId,null); });
+  ov.querySelector("#d-cancel").addEventListener("click",()=>ov.remove());
+  ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();}); inp.focus();
+}
+// ── MORE EDITORS: text facts, partner, child, photo, new circle ──────
+const _TA='width:100%;min-height:120px;padding:8px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit';
+const _IN='width:100%;padding:8px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px';
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");}
+
+async function setText(person, columnId, value){
+  const field=TEXTCOL_FIELD[columnId];
+  const isLong=columnId.startsWith("long_text");
+  try{
+    await mondayWrite(person.id,{[columnId]: isLong?{text:value||""}:(value||"")});
+    if(field) person[field]=value||null;
+    toast("Saved ✓"); if(currentPerson&&currentPerson.id===person.id)selectPerson(person);
+  }catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+function editText(person, columnId, label, multiline){
+  const field=TEXTCOL_FIELD[columnId]; const cur=person[field]||"";
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  const input = multiline ? `<textarea id="t-in" style="${_TA}">${esc(cur)}</textarea>` : `<input id="t-in" type="text" value="${esc(cur)}" style="${_IN}">`;
+  ov.innerHTML=`<div class="picker" style="width:380px"><div class="picker-head"><h3>${label} — ${person.name}</h3>${input}</div>
+    <div class="picker-foot"><button class="toggle" id="t-cancel">Cancel</button> <button class="toggle on" id="t-save">Save</button></div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector("#t-in"); inp.focus();
+  ov.querySelector("#t-save").addEventListener("click",async()=>{ const v=inp.value; ov.remove(); await setText(person,columnId,v); });
+  ov.querySelector("#t-cancel").addEventListener("click",()=>ov.remove());
+  ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+
+// Partner (reciprocal board_relation)
+async function setPartner(personId, partnerId){
+  const p=PEOPLE.find(x=>x.id===personId), q=PEOPLE.find(x=>x.id===partnerId); if(!p||!q)return;
+  try{
+    await sbPatch("contacts","id",personId,{partner_id:partnerId});
+    await sbPatch("contacts","id",partnerId,{partner_id:personId});
+    p.partnerId=partnerId; q.partnerId=personId;
+    toast(`Linked ${p.name} ❤ ${q.name}`); renderGraph(); if(currentPerson)selectPerson(p);
+  }catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+// Add a child (parent_child join row)
+async function addChild(parentId, childId){
+  const parent=PEOPLE.find(x=>x.id===parentId), child=PEOPLE.find(x=>x.id===childId); if(!parent||!child)return;
+  try{
+    await sbInsert("parent_child",[{parent_id:parentId,child_id:childId}],"resolution=ignore-duplicates,return=minimal");
+    child.parentIds=[...new Set([...(child.parentIds||[]),parentId])]; parent.childrenIds=[...new Set([...(parent.childrenIds||[]),childId])];
+    toast(`${child.name} is now a child of ${parent.name}`); renderGraph(); if(currentPerson)selectPerson(parent);
+  }catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+
+// Photo: pick → square crop (pan/zoom to centre the face) → upload
+function pickPhoto(person){
+  const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
+  inp.onchange=()=>{ if(inp.files&&inp.files[0]) openCrop(person, inp.files[0]); };
+  inp.click();
+}
+function openCrop(person, file){
+  const FRAME=280, OUT=480; const img=new Image();
+  img.onload=()=>{
+    const minScale=FRAME/Math.min(img.naturalWidth,img.naturalHeight);
+    let scale=minScale, tx=(FRAME-img.naturalWidth*scale)/2, ty=(FRAME-img.naturalHeight*scale)/2;
+    const ov=document.createElement("div"); ov.className="picker-overlay";
+    ov.innerHTML=`<div class="picker" style="width:320px"><div class="picker-head"><h3>Position the face — ${person.name}</h3></div>
+      <div style="padding:14px;display:flex;flex-direction:column;align-items:center;gap:10px">
+        <div id="crop-frame" style="width:${FRAME}px;height:${FRAME}px;border-radius:12px;overflow:hidden;position:relative;background:#000;cursor:grab;touch-action:none">
+          <img id="crop-img" src="${img.src}" draggable="false" style="position:absolute;left:0;top:0;transform-origin:0 0;user-select:none;-webkit-user-drag:none">
+          <div style="position:absolute;inset:0;pointer-events:none;border:2px dashed rgba(255,255,255,.4);border-radius:12px"></div>
+        </div>
+        <input id="crop-zoom" type="range" min="1" max="4" step="0.01" value="1" style="width:100%">
+        <div style="font-size:11px;color:var(--muted)">Drag to move · slider to zoom</div>
+      </div>
+      <div class="picker-foot"><button class="toggle" id="crop-cancel">Cancel</button> <button class="toggle on" id="crop-save">Save photo</button></div></div>`;
+    document.body.appendChild(ov);
+    const el=ov.querySelector("#crop-img"), frame=ov.querySelector("#crop-frame"), zoom=ov.querySelector("#crop-zoom");
+    function clamp(){ const w=img.naturalWidth*scale, h=img.naturalHeight*scale; if(tx>0)tx=0; if(ty>0)ty=0; if(tx<FRAME-w)tx=FRAME-w; if(ty<FRAME-h)ty=FRAME-h; }
+    function apply(){ el.style.width=(img.naturalWidth*scale)+"px"; el.style.height=(img.naturalHeight*scale)+"px"; el.style.transform=`translate(${tx}px,${ty}px)`; }
+    clamp(); apply();
+    let dragging=false, lx=0, ly=0;
+    frame.addEventListener("pointerdown",e=>{dragging=true;lx=e.clientX;ly=e.clientY;frame.setPointerCapture(e.pointerId);frame.style.cursor="grabbing";});
+    frame.addEventListener("pointermove",e=>{ if(!dragging)return; tx+=e.clientX-lx; ty+=e.clientY-ly; lx=e.clientX; ly=e.clientY; clamp(); apply(); });
+    frame.addEventListener("pointerup",()=>{dragging=false;frame.style.cursor="grab";});
+    zoom.addEventListener("input",()=>{ const ns=minScale*parseFloat(zoom.value), cx=FRAME/2, cy=FRAME/2; tx=cx-(cx-tx)*(ns/scale); ty=cy-(cy-ty)*(ns/scale); scale=ns; clamp(); apply(); });
+    ov.querySelector("#crop-cancel").addEventListener("click",()=>ov.remove());
+    ov.querySelector("#crop-save").addEventListener("click",()=>{
+      const c=document.createElement("canvas"); c.width=OUT; c.height=OUT; const ctx=c.getContext("2d");
+      ctx.drawImage(img, -tx/scale, -ty/scale, FRAME/scale, FRAME/scale, 0, 0, OUT, OUT);
+      c.toBlob(blob=>{ ov.remove(); if(blob) uploadPhoto(person, blob, (file.name||"photo").replace(/\.[^.]+$/,"")+".jpg"); }, "image/jpeg", 0.9);
+    });
+    ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+  };
+  img.onerror=()=>toast("Couldn't read that image",true);
+  img.src=URL.createObjectURL(file);
+}
+async function uploadPhoto(person, fileOrBlob, filename){
+  toast("Uploading photo…");
+  const isPng=(filename||"").toLowerCase().endsWith(".png")||(fileOrBlob.type==="image/png");
+  const path=`${person.id}-${Date.now()}.${isPng?"png":"jpg"}`;
+  try{
+    const r=await fetch(`${SUPA.url}/storage/v1/object/photos/${path}`,{method:"POST",
+      headers:{apikey:SUPA.key,Authorization:"Bearer "+(AUTH_TOKEN||SUPA.key),"Content-Type":fileOrBlob.type||"image/jpeg","x-upsert":"true"},
+      body:fileOrBlob});
+    if(!r.ok) throw new Error("storage "+(await r.text()));
+    const url=`${SUPA.url}/storage/v1/object/public/photos/${path}`;
+    await sbPatch("contacts","id",person.id,{photo_url:url});
+    person.photo=url; toast("Photo saved ✓"); renderGraph(); if(currentPerson)selectPerson(person);
+  }catch(err){ try{ person.photo=URL.createObjectURL(fileOrBlob); renderGraph(); if(currentPerson)selectPerson(person); }catch(e){} toast("Photo upload failed",true); console.warn(err); }
+}
+
+// Create a brand-new circle in Supabase, give it a colour, register it live
+async function createCircle(name){
+  const id=Date.now();
+  const used=new Set(CIRCLE_DEFS.map(c=>c.colour));
+  const colour=CIRCLE_PALETTE.find(c=>!used.has(c)) || CIRCLE_PALETTE[CIRCLE_DEFS.length%CIRCLE_PALETTE.length];
+  await sbInsert("circles",[{id, name, colour}]);
+  const def={id:String(id), label:name, colour};
+  CIRCLE_DEFS.push(def); CIRCLE_MAP[def.id]=def; state.visibleCircleIds.add(def.id);
+  return def;
+}
+// ── Name, status, number, contact, household editors ────────────────
+async function setName(person,newName){
+  if(!newName||!newName.trim())return;
+  try{ await mondayWrite(person.id,{name:newName.trim()}); person.name=newName.trim(); toast("Name updated ✓"); buildFilters(); renderGraph(); if(currentPerson&&currentPerson.id===person.id)selectPerson(person); }
+  catch(err){ toast("Couldn't rename",true); console.warn(err); }
+}
+function editName(person){
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:360px"><div class="picker-head"><h3>Edit name</h3><input id="nm-in" type="text" value="${esc(person.name)}" style="${_IN}"><div style="font-size:11px;color:var(--muted);margin-top:6px">Format: Surname Firstname. Use the Maiden-name field for a née surname.</div></div><div class="picker-foot"><button class="toggle" id="nm-cancel">Cancel</button> <button class="toggle on" id="nm-save">Save</button></div></div>`;
+  document.body.appendChild(ov); const inp=ov.querySelector("#nm-in"); inp.focus(); inp.select();
+  ov.querySelector("#nm-save").addEventListener("click",async()=>{const v=inp.value;ov.remove();await setName(person,v);});
+  ov.querySelector("#nm-cancel").addEventListener("click",()=>ov.remove()); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+async function setStatus(person,columnId,fkey,label){
+  try{
+    await mondayWrite(person.id,{[columnId]: label?{label}:{}}, ",create_labels_if_missing:true");
+    if(fkey==="__closeness__"){ const m=(label||"").match(/\((\d+)\)/); person.closeness={tier:m?parseInt(m[1]):150, label:(label||"").split(" (")[0]||"Extended"}; }
+    else if(STATUS_FIELD[columnId]) person[STATUS_FIELD[columnId]]=label||null;
+    toast("Saved ✓"); buildFilters(); renderGraph(); if(currentPerson&&currentPerson.id===person.id)selectPerson(person);
+  }catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+function editStatus(person,columnId,fkey,label){
+  const cur = fkey==="__closeness__" ? person.closeness.label : (STATUS_FIELD[columnId]?person[STATUS_FIELD[columnId]]:null);
+  const opts=STATUS_OPTS[columnId]||[];
+  const curFull = opts.find(o=>o===cur||o.split(" (")[0]===cur) || "";
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:320px"><div class="picker-head"><h3>${label} — ${person.name}</h3><select id="st-in" style="${_IN}"><option value="">—</option>${opts.map(o=>`<option value="${esc(o)}" ${o===curFull?"selected":""}>${o}</option>`).join("")}</select></div><div class="picker-foot"><button class="toggle" id="st-cancel">Cancel</button> <button class="toggle on" id="st-save">Save</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector("#st-save").addEventListener("click",async()=>{const v=ov.querySelector("#st-in").value;ov.remove();await setStatus(person,columnId,fkey,v||null);});
+  ov.querySelector("#st-cancel").addEventListener("click",()=>ov.remove()); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+async function setNumber(person,columnId,value){
+  try{ await mondayWrite(person.id,{[columnId]: (value!==""&&value!=null)?String(value):""}); if(columnId==="numeric_mm3wz3fb")person.age=(value!==""&&value!=null)?parseInt(value):null; toast("Saved ✓"); renderGraph(); if(currentPerson&&currentPerson.id===person.id)selectPerson(person); }
+  catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+function editNumber(person,columnId,label){
+  const cur = columnId==="numeric_mm3wz3fb" ? (person.age??"") : "";
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:300px"><div class="picker-head"><h3>${label} — ${person.name}</h3><input id="num-in" type="number" value="${cur}" style="${_IN}"></div><div class="picker-foot"><button class="toggle" id="num-clear" style="float:left">Clear</button><button class="toggle" id="num-cancel">Cancel</button> <button class="toggle on" id="num-save">Save</button></div></div>`;
+  document.body.appendChild(ov); const inp=ov.querySelector("#num-in"); inp.focus();
+  ov.querySelector("#num-save").addEventListener("click",async()=>{const v=inp.value;ov.remove();await setNumber(person,columnId,v);});
+  ov.querySelector("#num-clear").addEventListener("click",async()=>{ov.remove();await setNumber(person,columnId,"");});
+  ov.querySelector("#num-cancel").addEventListener("click",()=>ov.remove()); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+async function setContact(person,kind,value){
+  const v=(value||"").trim(), col = kind==="phone"?"phone":"email";
+  const val = kind==="phone" ? (v?{phone:v,countryShortName:"AU"}:{}) : (v?{email:v,text:v}:{});
+  try{ await mondayWrite(person.id,{[col]:val}); person[kind]=v||null; toast("Saved ✓"); if(currentPerson&&currentPerson.id===person.id)selectPerson(person); }
+  catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+function editContact(person,kind,label){
+  const cur=person[kind]||"";
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:340px"><div class="picker-head"><h3>${label} — ${person.name}</h3><input id="ct-in" type="${kind==='email'?'email':'tel'}" value="${esc(cur)}" style="${_IN}"></div><div class="picker-foot"><button class="toggle" id="ct-cancel">Cancel</button> <button class="toggle on" id="ct-save">Save</button></div></div>`;
+  document.body.appendChild(ov); const inp=ov.querySelector("#ct-in"); inp.focus();
+  ov.querySelector("#ct-save").addEventListener("click",async()=>{const v=inp.value;ov.remove();await setContact(person,kind,v);});
+  ov.querySelector("#ct-cancel").addEventListener("click",()=>ov.remove()); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+}
+let _families=null;
+async function fetchFamilies(){ if(_families)return _families; _families=await sbGet("families?select=id,name&order=name"); return _families; }
+async function setHousehold(person,familyId,familyName){
+  try{ await sbPatch("contacts","id",person.id,{household_id: familyId?Number(familyId):null}); person.householdId=familyId?Number(familyId):null; person.household=familyName||null; toast("Saved ✓"); renderGraph(); if(currentPerson&&currentPerson.id===person.id)selectPerson(person); }
+  catch(err){ toast("Couldn't save",true); console.warn(err); }
+}
+async function editHousehold(person){
+  toast("Loading households…");
+  let fams; try{ fams=await fetchFamilies(); }catch(err){ toast("Couldn't load households",true); console.warn(err); return; }
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker"><div class="picker-head"><h3>Household for ${person.name}</h3><input type="search" placeholder="Filter, or type a new family name…" id="hh-s"></div><div class="picker-list" id="hh-l"></div><div class="picker-foot"><button class="toggle" id="hh-none" style="float:left">No household</button><button class="toggle" id="hh-x">Close</button></div></div>`;
+  document.body.appendChild(ov);
+  const l=ov.querySelector("#hh-l"), s=ov.querySelector("#hh-s");
+  function draw(q){ const qt=q.trim();
+    const f=qt?fams.filter(x=>x.name.toLowerCase().includes(qt.toLowerCase())):fams;
+    let html=f.map(x=>`<div class="picker-item" data-fid="${x.id}" data-fname="${esc(x.name)}"><span class="pi-dot" style="background:#fdab3d"></span><span>${x.name}</span></div>`).join("");
+    const exact=fams.some(x=>x.name.toLowerCase()===qt.toLowerCase());
+    if(qt&&!exact) html+=`<div class="picker-item" data-newfam="${esc(qt)}"><span class="pi-dot" style="background:var(--accent)"></span><span>＋ Create household "<strong>${esc(qt)}</strong>"</span></div>`;
+    l.innerHTML=html||`<div style="padding:14px;color:var(--muted)">Type a family name to create it.</div>`;
+    l.querySelectorAll("[data-fid]").forEach(it=>it.addEventListener("click",async()=>{ov.remove();await setHousehold(person,it.dataset.fid,it.dataset.fname);}));
+    const nf=l.querySelector("[data-newfam]");
+    if(nf) nf.addEventListener("click",async()=>{ ov.remove(); try{ const id=Date.now(); await sbInsert("families",[{id,name:nf.dataset.newfam}]); _families.push({id,name:nf.dataset.newfam}); await setHousehold(person,id,nf.dataset.newfam); }catch(err){ toast("Couldn't create household",true); console.warn(err);} });
+  }
+  s.addEventListener("input",()=>draw(s.value)); ov.querySelector("#hh-x").addEventListener("click",()=>ov.remove());
+  ov.querySelector("#hh-none").addEventListener("click",async()=>{ov.remove();await setHousehold(person,null,null);});
+  ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();}); draw(""); s.focus();
+}
+</script>
+</body>
+</html>

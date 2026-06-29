@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parsons-Aubone</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=EB+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{ --ivory:#F2ECDD; --soft:rgba(242,236,221,.74); --gold:#CBAA6A; --rule:rgba(203,170,106,.5); --night:#0b0d0a; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--night); color:var(--ivory); font-family:"EB Garamond",Georgia,serif;
+    min-height:100%; overflow:hidden; -webkit-font-smoothing:antialiased}
+
+  /* ── cinematic montage ── */
+  .cinema{position:fixed; inset:0; z-index:0; overflow:hidden; background:var(--night)}
+  .slide{position:absolute; inset:0; background-size:cover; background-position:center;
+    opacity:0; transition:opacity 2.6s ease-in-out; will-change:opacity,transform; transform:scale(1.05)}
+  .slide.active{opacity:1}
+  .s1{background-image:url("https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Dunluce_Castle_and_Beach_%2819682178030%29.jpg/1920px-Dunluce_Castle_and_Beach_%2819682178030%29.jpg"); animation:kb1 34s ease-in-out infinite alternate}
+  .s2{background-image:url("https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/M%C3%BCnchen-Altstadt_Residenz_Antiquarium_254.jpg/1920px-M%C3%BCnchen-Altstadt_Residenz_Antiquarium_254.jpg"); animation:kb2 36s ease-in-out infinite alternate}
+  .s3{background-image:url("https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Campeonato_Argentino_de_Polo_2010_-_5237109478_e7ed034169_o.jpg/1920px-Campeonato_Argentino_de_Polo_2010_-_5237109478_e7ed034169_o.jpg"); animation:kb1 34s ease-in-out infinite alternate}
+  .s4{background-image:url("https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Flinders_St_Station_at_night.jpg/1920px-Flinders_St_Station_at_night.jpg"); animation:kb2 36s ease-in-out infinite alternate}
+  .s5{background-image:url("https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/High_Cross_and_O%27Rourke%27s_Tower.jpg/1920px-High_Cross_and_O%27Rourke%27s_Tower.jpg"); animation:kb1 34s ease-in-out infinite alternate}
+  @keyframes kb1{from{transform:scale(1.05) translate(0,0)}to{transform:scale(1.18) translate(-2%,-1.5%)}}
+  @keyframes kb2{from{transform:scale(1.18) translate(2%,1%)}to{transform:scale(1.05) translate(0,0)}}
+  .scrim{position:fixed; inset:0; z-index:1; pointer-events:none;
+    background:radial-gradient(120% 100% at 50% 42%, rgba(8,10,7,.30) 0%, rgba(8,10,7,.52) 55%, rgba(8,10,7,.72) 100%),
+               linear-gradient(180deg, rgba(8,10,7,.55) 0%, rgba(8,10,7,.12) 34%, rgba(8,10,7,.55) 100%)}
+  .grain{position:fixed; inset:0; z-index:1; pointer-events:none; opacity:.05; mix-blend-mode:overlay;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  .frame{position:fixed; inset:2.4vw; z-index:2; pointer-events:none; border:1px solid rgba(203,170,106,.34)}
+
+  .stage{position:relative; z-index:3; min-height:100dvh; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; padding:10vh 8vw}
+  .hidden{display:none !important}
+
+  .mark{width:46px; height:auto; opacity:.92; animation:fade 2.4s ease .3s both;
+    filter:drop-shadow(0 2px 10px rgba(0,0,0,.45))}
+  .over{margin-top:24px; font-family:"Cinzel",serif; font-weight:400; letter-spacing:.5em;
+    font-size:12px; color:var(--gold); text-indent:.5em; animation:fade 2.4s ease .5s both; text-shadow:0 1px 8px rgba(0,0,0,.5)}
+  .house{font-family:"Cinzel",serif; font-weight:500; text-transform:uppercase;
+    font-size:clamp(28px,6vw,62px); letter-spacing:.2em; text-indent:.2em; color:var(--ivory);
+    margin:14px 0 0; line-height:1.04; text-shadow:0 2px 22px rgba(0,0,0,.55); animation:rise 2s ease .2s both}
+  .rule{width:86px; height:1px; margin:26px auto 22px; background:linear-gradient(90deg,transparent,var(--gold),transparent);
+    animation:fade 2.6s ease .8s both}
+  .triad{display:flex; flex-direction:column; gap:8px; animation:fade 2.8s ease 1s both}
+  .triad span{font-family:"EB Garamond",serif; font-style:italic; font-size:clamp(15px,1.9vw,20px);
+    letter-spacing:.04em; color:var(--soft); text-shadow:0 1px 12px rgba(0,0,0,.6)}
+  .triad span:nth-child(2){color:var(--ivory)}
+  .emblem{width:58px; height:auto; margin:0 auto 2px; opacity:.95; filter:drop-shadow(0 2px 10px rgba(0,0,0,.5)); animation:fade 2.4s ease .3s both}
+  .places{margin-top:16px; font-family:"Cinzel",serif; font-weight:400; letter-spacing:.34em; font-size:11px; color:var(--gold); text-indent:.34em; text-shadow:0 1px 8px rgba(0,0,0,.5); animation:fade 2.6s ease .7s both}
+  .motto{display:flex; flex-direction:column; gap:5px; animation:fade 2.8s ease 1s both}
+  .motto span{font-family:"EB Garamond",serif; font-style:italic; font-size:clamp(15px,1.9vw,19px); color:var(--soft); text-shadow:0 1px 12px rgba(0,0,0,.6)}
+  .motto span:first-child{color:var(--ivory)}
+
+  .keyhole{position:fixed; right:calc(2.4vw + 20px); bottom:calc(2.4vw + 16px); z-index:6; width:32px; height:38px;
+    display:flex; align-items:center; justify-content:center; background:none; border:none; cursor:pointer;
+    opacity:.55; transition:opacity .45s ease, transform .45s ease; filter:drop-shadow(0 2px 8px rgba(0,0,0,.5))}
+  .keyhole:hover{opacity:1; transform:translateY(-1px)}
+  .keyhole svg{width:22px; height:27px}
+  .credits{position:fixed; left:calc(2.4vw + 14px); bottom:calc(2.4vw + 12px); z-index:6;
+    font-family:"EB Garamond",serif; font-size:10px; letter-spacing:.08em; color:rgba(242,236,221,.4); max-width:46vw}
+
+  /* portal */
+  .veil{position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center;
+    background:rgba(8,10,7,.62); backdrop-filter:blur(6px); animation:fade .5s ease both; padding:24px}
+  .portal{width:100%; max-width:330px; text-align:center; padding:38px 32px 28px;
+    background:rgba(14,16,12,.86); border:1px solid var(--rule); box-shadow:0 30px 80px rgba(0,0,0,.6)}
+  .portal .word{margin:14px 0 22px; font-family:"EB Garamond",serif; font-style:italic; letter-spacing:.14em; font-size:14px; color:var(--soft)}
+  .gbtn{display:inline-flex; align-items:center; gap:11px; width:100%; justify-content:center; background:rgba(242,236,221,.05);
+    color:var(--ivory); border:1px solid var(--rule); border-radius:3px; padding:12px 16px;
+    font-family:"EB Garamond",serif; font-size:15px; letter-spacing:.02em; cursor:pointer; transition:border-color .3s,background .3s}
+  .gbtn:hover{border-color:var(--gold); background:rgba(203,170,106,.1)}
+  .gbtn .g{width:17px;height:17px;display:inline-flex}
+  .pmsg{margin-top:14px; font-family:"EB Garamond",serif; font-style:italic; font-size:13px; color:#e3a; min-height:1em; color:#d9a7a0}
+  .pclose{margin-top:16px; font-family:"Cinzel",serif; letter-spacing:.26em; font-size:10px; color:var(--soft); cursor:pointer; text-indent:.26em}
+  .pclose:hover{color:var(--ivory)}
+
+  /* private hall */
+  .doors{display:grid; grid-template-columns:1fr 1fr; gap:0; margin-top:30px; width:100%; max-width:580px;
+    border:1px solid var(--rule); background:rgba(8,10,7,.34); backdrop-filter:blur(2px); animation:rise 1.2s ease .15s both}
+  @media(max-width:540px){ .doors{grid-template-columns:1fr} .door:first-child{border-bottom:1px solid var(--rule)} }
+  .door{display:block; text-decoration:none; color:inherit; padding:34px 26px 30px; transition:background .35s ease}
+  .door:first-child{border-right:1px solid var(--rule)}
+  @media(max-width:540px){ .door:first-child{border-right:none} }
+  .door:hover{background:rgba(203,170,106,.08)}
+  .door .num{font-family:"Cinzel",serif; color:var(--gold); letter-spacing:.3em; font-size:12px}
+  .door h3{font-family:"Cinzel",serif; font-weight:500; text-transform:uppercase; letter-spacing:.16em; font-size:20px; margin:14px 0 8px; text-indent:.16em; text-shadow:0 1px 12px rgba(0,0,0,.5)}
+  .door p{margin:0; font-family:"EB Garamond",serif; font-style:italic; font-size:14px; color:var(--soft)}
+  .leave{margin-top:30px; font-family:"Cinzel",serif; letter-spacing:.26em; font-size:10px; color:var(--soft); cursor:pointer; text-indent:.26em; animation:fade 1.4s ease .3s both}
+  .leave:hover{color:var(--ivory)}
+
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+  @media (prefers-reduced-motion: reduce){ .slide{animation:none !important} *{animation-duration:.01ms !important} }
+</style>
+</head>
+<body>
+
+<div class="cinema" aria-hidden="true">
+  <div class="slide s1 active"></div>
+  <div class="slide s2"></div>
+  <div class="slide s3"></div>
+  <div class="slide s4"></div>
+  <div class="slide s5"></div>
+</div>
+<div class="scrim"></div>
+<div class="grain"></div>
+<div class="frame"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#E6CD93"/><stop offset=".6" stop-color="#CBAA6A"/><stop offset="1" stop-color="#9A7B3F"/>
+  </linearGradient>
+  <symbol id="key" viewBox="0 0 24 30">
+    <g fill="none" stroke="url(#gold)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="6.5" r="4"/><path d="M12,10.5 V26 M12,20 h4 M12,23 h3"/>
+    </g>
+  </symbol>
+  <symbol id="cross" viewBox="0 0 72 80">
+    <g stroke="url(#gold)" stroke-width="2.2" fill="none" stroke-linecap="round"><path d="M36,12 V64 M14,38 H58"/></g>
+    <g fill="url(#gold)" font-family="Cinzel,serif" font-weight="600" font-size="10" letter-spacing="0.6" text-anchor="middle">
+      <text x="25" y="30">IC</text><text x="47" y="30">XC</text><text x="25" y="55">NI</text><text x="47" y="55">KA</text>
+    </g>
+  </symbol>
+</defs></svg>
+
+<!-- ░░ PUBLIC FACE ░░ -->
+<section id="view-public" class="stage">
+  <svg class="emblem" viewBox="0 0 72 80" aria-hidden="true"><use href="#cross"/></svg>
+  <div class="over">THE HOUSE OF</div>
+  <h1 class="house">Parsons-Aubone</h1>
+  <div class="places">· IRELAND · M&Uuml;NCHEN · BUENOS AIRES · MELBOURNE ·</div>
+  <div class="rule"></div>
+  <div class="motto">
+    <span>In te Domine speravi</span>
+    <span>Auf dich, o Herr, habe ich gehofft</span>
+  </div>
+</section>
+
+<!-- ░░ PRIVATE HALL ░░ -->
+<section id="view-hall" class="stage hidden">
+  <svg class="emblem" viewBox="0 0 72 80" aria-hidden="true" style="margin-bottom:16px"><use href="#cross"/></svg>
+  <div class="doors">
+    <a class="door" href="map.html"><div class="num">I</div><h3>El Mapa</h3><p>Las almas y sus vínculos.</p></a>
+    <a class="door" href="insights.html"><div class="num">II</div><h3>La Crónica</h3><p>Fechas, círculos y memoria.</p></a>
+  </div>
+  <div class="leave" id="leave">SALIR · VERLASSEN · LEAVE</div>
+</section>
+
+<button class="keyhole" id="keyhole" aria-label="Enter" title="">
+  <svg viewBox="0 0 24 30" aria-hidden="true"><use href="#key"/></svg>
+</button>
+<div class="credits">Dunluce Castle · Residenz München · Campeonato Argentino de Polo · Flinders Street Station · Clonmacnoise — Wikimedia Commons, CC&nbsp;BY-SA</div>
+
+<!-- portal -->
+<div class="veil hidden" id="veil">
+  <div class="portal">
+    <svg class="emblem" viewBox="0 0 72 80" aria-hidden="true" style="width:48px;margin-bottom:8px"><use href="#cross"/></svg>
+    <div class="word">Eintreten · Ingresar · Enter</div>
+    <button class="gbtn" id="login-btn">
+      <span class="g"><svg width="17" height="17" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.6 2.4 30.1 0 24 0 14.6 0 6.4 5.4 2.5 13.3l7.9 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.2-3.9 6.6-9.6 6.6-16.5z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.1 0 11.3-2 15-5.5l-7.1-5.5c-2 1.3-4.5 2.1-7.9 2.1-6.3 0-11.7-3.7-13.6-9.1l-7.9 6.1C6.4 42.6 14.6 48 24 48z"/></svg></span>
+      <span>Continue with Google</span>
+    </button>
+    <div class="pmsg" id="pmsg"></div>
+    <div class="pclose" id="pclose">Schließen · Cerrar · Close</div>
+  </div>
+</div>
+
+<script>
+// fade between background plates
+(function(){ const s=[...document.querySelectorAll('.slide')]; let i=0;
+  setInterval(()=>{ s[i].classList.remove('active'); i=(i+1)%s.length; s[i].classList.add('active'); }, 6800); })();
+
+const SUPA = { url:"https://jyrmfnrusrnhekksitkm.supabase.co", key:"sb_publishable_X-IX9YB14zm9rSUanq0b7w_n28vb06W" };
+const ALLOW = ["santi@parsons-aubone.com","cinthia@parsons-aubone.com"];
+const sb = window.supabase.createClient(SUPA.url, SUPA.key);
+const el = id => document.getElementById(id);
+const showHall = on => { el("view-hall").classList.toggle("hidden", !on); el("view-public").classList.toggle("hidden", on); el("keyhole").classList.toggle("hidden", on); };
+const openPortal = on => el("veil").classList.toggle("hidden", !on);
+
+el("keyhole").onclick = () => { el("pmsg").textContent=""; openPortal(true); };
+el("pclose").onclick  = () => openPortal(false);
+el("veil").addEventListener("click", e => { if(e.target === el("veil")) openPortal(false); });
+el("login-btn").onclick = () => sb.auth.signInWithOAuth({ provider:"google", options:{ redirectTo: location.origin + location.pathname } });
+el("leave").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+
+async function apply(session){
+  if(session && session.access_token){
+    const email = (session.user.email||"").toLowerCase();
+    if(!ALLOW.includes(email)){
+      await sb.auth.signOut(); openPortal(true);
+      el("pmsg").textContent = "Kein Zutritt · Sin acceso · Not permitted"; return;
+    }
+    openPortal(false); showHall(true);
+  } else { showHall(false); }
+}
+sb.auth.onAuthStateChange((_e,s)=>apply(s));
+sb.auth.getSession().then(({data})=>apply(data.session));
+</script>
+</body>
+</html>
