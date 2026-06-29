@@ -78,6 +78,7 @@
   @keyframes slidein{ from{transform:translateX(40px);opacity:0} to{transform:none;opacity:1} }
   .card-drawer .back{ position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:7px; width:100%; background:rgba(13,15,11,.6); backdrop-filter:blur(10px); border:none; border-bottom:1px solid var(--line); color:var(--soft); padding:13px 20px; font-family:var(--f-ui); font-size:13px; font-weight:600; cursor:pointer; }
   .card-drawer .back:hover{ color:var(--gold-bright); }
+  .card-drawer.penumbra{ border-top:3px solid #C8945B; }
   .card-drawer > :not(.back){ padding-left:22px; padding-right:22px; }
   .info-photo{ width:100%; aspect-ratio:4/3; border-radius:16px; background:var(--ink-2); background-size:cover; background-position:center; border:1px solid var(--line-2); margin:14px 0 14px; display:flex; align-items:center; justify-content:center; font-size:64px; color:var(--muted-2); overflow:hidden; box-shadow:var(--shadow); }
   .info-photo img{ width:100%; height:100%; object-fit:cover; }
@@ -111,10 +112,12 @@
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
     <div class="tabs" id="tabs">
       <div class="tab active" data-tab="overview">At a Glance</div>
+      <div class="tab" data-tab="today">Today</div>
       <div class="tab" data-tab="calendar">Birthdays</div>
       <div class="tab" data-tab="anniversaries">Anniversaries</div>
       <div class="tab" data-tab="health">The Roll</div>
       <div class="tab" data-tab="circles">Circles</div>
+      <div class="tab" data-tab="horizons">Horizons</div>
     </div>
     <button id="refresh-btn" class="tab" style="border:1px solid var(--border)">↻ Refresh</button>
     <span class="stamp" id="stamp"></span>
@@ -334,7 +337,64 @@ function renderCircles(){
   document.getElementById("new-circle-btn").addEventListener("click",async()=>{const name=prompt("New circle name:");if(name&&name.trim()){try{await createCircle(name.trim());toast(`Created circle "${name.trim()}"`);renderCircles();}catch(err){toast("Couldn't create",true);console.warn(err);}}});
 }
 
-const TABS={overview:renderOverview,calendar:renderCalendar,anniversaries:renderAnniversaries,health:renderHealth,circles:renderCircles};
+const HZ_CANON=[
+  {key:"Ireland",glyph:"☘",colour:"#5E8B6A"},
+  {key:"München",glyph:"⚜",colour:"#8FA1B3"},
+  {key:"Buenos Aires",glyph:"🐎",colour:"#7BB0DA"},
+  {key:"Melbourne",glyph:"🌃",colour:"#C49A4A"}
+];
+const HZ_PAL=["#C9A24A","#A98FB0","#7BB0DA","#5E8B6A","#C8945B","#9AA7B3","#C97F7F","#83A18B"];
+function hzMeta(k){ const c=HZ_CANON.find(x=>x.key===k); if(c)return c; let h=0; for(let i=0;i<k.length;i++)h=(h*31+k.charCodeAt(i))>>>0; return {key:k,glyph:"📍",colour:HZ_PAL[h%HZ_PAL.length]}; }
+
+function renderToday(){
+  const C=document.getElementById("content");
+  const occ=s=>{const a=s.split("-"),mm=a[1],dd=a[2];const x=new Date(`${TODAY.getFullYear()}-${mm}-${dd}`),y=new Date(`${TODAY.getFullYear()+1}-${mm}-${dd}`);const n=x>=TODAY?x:y;return{n,days:Math.ceil((n-TODAY)/86400000)};};
+  const bd=PEOPLE.filter(p=>p.birthday).map(p=>({p,...occ(p.birthday),kind:"birthday",label:p.name})).filter(x=>x.days<=21);
+  const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p])),seen=new Set(),an=[];
+  PEOPLE.filter(p=>p.anniversary).forEach(p=>{ if(seen.has(p.id))return; const o=occ(p.anniversary); if(o.days>21)return;
+    const partner=p.partnerId?byId[p.partnerId]:null; let label=p.name;
+    if(partner&&partner.anniversary===p.anniversary){ seen.add(partner.id); label=`${p.name.split(" ").slice(-1)[0]} & ${partner.name.split(" ").slice(-1)[0]} ${p.name.split(" ")[0]}`; }
+    seen.add(p.id); an.push({p,...o,kind:"anniversary",label}); });
+  const events=[...bd,...an].sort((a,b)=>a.days-b.days);
+  const penumbra=PEOPLE.filter(p=>p.last_contact).map(p=>({p,d:Math.floor((TODAY-new Date(p.last_contact))/86400000)})).filter(x=>x.d>=180).sort((a,b)=>b.d-a.d).slice(0,12);
+  const evRow=e=>`<div class="bday-row">${avatar(e.p)}<div><div style="font-weight:600">${e.kind==="anniversary"?"💍":"🎂"} <span class="row-link" data-pid="${e.p.id}">${e.label}</span> <span class="bday-soon">${e.days===0?"today":e.days===1?"tomorrow":"in "+e.days+"d"}</span></div><div style="font-size:11px;color:var(--muted)">${e.kind==="anniversary"?"Anniversary":"Birthday"} · ${e.p.circle.label}</div></div></div>`;
+  const penRow=x=>`<div class="bday-row">${avatar(x.p)}<div><div style="font-weight:600"><span class="row-link" data-pid="${x.p.id}">${x.p.name}</span></div><div style="font-size:11px;color:var(--muted)">last heard from · ${x.d<60?x.d+" days":Math.round(x.d/30)+" months"} ago</div></div></div>`;
+  const todayStr=TODAY.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  C.innerHTML=`<div class="grid">
+    <div class="card wide" style="text-align:center">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)">${todayStr}</div>
+      <h2 style="font-family:'Cinzel',serif;font-size:22px;margin:8px 0 4px;border:0;text-transform:none;letter-spacing:.04em">Today the House remembers</h2>
+      <div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">those whose days draw near, and those grown quiet.</div>
+    </div>
+    <div class="card"><h2 style="border:0">🕯 Days drawing near</h2>${events.length?events.map(evRow).join(""):`<div class="empty">No birthdays or anniversaries within the next three weeks.</div>`}</div>
+    <div class="card"><h2 style="border:0">🌒 Kinships in penumbra</h2>${penumbra.length?penumbra.map(penRow).join(""):`<div class="empty">No correspondence has fallen quiet — or none is recorded yet.<br><br>As you note letters, calls and visits, the House will gently raise the bonds grown distant.</div>`}</div>
+  </div>`;
+}
+
+function renderGeography(){
+  const C=document.getElementById("content");
+  const SUBS={"Ireland":"Éire · the old seat","München":"Bayern · the Residenz","Buenos Aires":"Argentina · the pampas","Melbourne":"Victoria · the present hearth"};
+  const present=[...new Set(PEOPLE.map(p=>(p.residence||"").trim()).filter(Boolean))];
+  const canonKeys=HZ_CANON.map(c=>c.key);
+  const order=[...canonKeys, ...present.filter(k=>!canonKeys.includes(k)).sort((a,b)=>a.localeCompare(b))];
+  const groups=order.map(k=>{const m=hzMeta(k); return {key:k,glyph:m.glyph,colour:m.colour,sub:SUBS[k]||"",people:PEOPLE.filter(p=>(p.residence||"").trim()===k).sort((a,b)=>a.closeness.tier-b.closeness.tier)};});
+  const placed=new Set(groups.flatMap(g=>g.people.map(p=>p.id)));
+  const other=PEOPLE.filter(p=>!placed.has(p.id));
+  const row=p=>`<tr><td style="width:42px">${avatar(p)}</td><td><span class="row-link" data-pid="${p.id}"><strong>${p.name}</strong></span>${p.household?`<div style="font-size:11px;color:var(--muted)">${p.household}${p.role?` · ${p.role}`:""}</div>`:""}</td></tr>`;
+  const card=g=>`<div class="card" style="border-top:2px solid ${g.colour}">
+    <h2 style="border:0"><span style="font-size:20px">${g.glyph}</span> ${g.key}<span style="float:right;font-family:'Cinzel',serif;color:${g.colour};font-size:20px">${g.people.length}</span></h2>
+    ${g.sub?`<div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted);margin:-4px 0 10px">${g.sub}</div>`:`<div style="margin:-2px 0 8px"></div>`}
+    <table><tbody>${g.people.map(row).join("")||`<tr><td style="color:var(--muted);font-size:12px">No souls recorded here yet.</td></tr>`}</tbody></table>
+  </div>`;
+  let html=groups.map(card).join("");
+  if(other.length)html+=`<div class="card"><h2 style="border:0">✦ Elsewhere<span style="float:right;font-family:'Cinzel',serif;color:var(--muted);font-size:20px">${other.length}</span></h2><table><tbody>${other.map(row).join("")}</tbody></table></div>`;
+  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px">
+      <h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;margin-bottom:2px;text-transform:none;letter-spacing:.04em">The Horizons of the House</h2>
+      <div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">every city where the House has taken root · tap a soul to open them</div>
+    </div><div class="grid">${html}</div>`;
+}
+
+const TABS={overview:renderOverview,today:renderToday,calendar:renderCalendar,anniversaries:renderAnniversaries,health:renderHealth,circles:renderCircles,horizons:renderGeography};
 let activeTab="overview";
 document.querySelectorAll(".tab").forEach(t=>{
   t.addEventListener("click",()=>{
@@ -421,7 +481,7 @@ async function liveRefresh(){
         childrenNotes:c.children_notes, pets:c.pets, dietary:c.dietary, tags:[],
         phone:c.phone, email:c.email, location:c.address,
         school:c.school, schoolYear:c.school_year, classKid:c.class_kid,
-        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion };
+        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion, residence:c.residence, last_contact:c.last_contact, is_female:c.is_female, allergies:c.allergies, values_notes:c.values_notes };
     });
     const byId=Object.fromEntries(fresh.map(p=>[p.id,p]));
     for(const p of fresh){ if(p.partnerId&&byId[p.partnerId]){ const q=byId[p.partnerId]; const best=Math.min(p.closeness.tier,q.closeness.tier); const lbl=p.closeness.tier===best?p.closeness.label:q.closeness.label; p.closeness=q.closeness={tier:best,label:lbl}; } }
@@ -467,6 +527,26 @@ document.getElementById("content").addEventListener("click",e=>{
 
 function toast(msg,isErr){ let t=document.getElementById("toast"); if(!t){t=document.createElement("div");t.id="toast";document.body.appendChild(t);} t.textContent=msg; t.className="toast show"+(isErr?" err":""); clearTimeout(t._h); t._h=setTimeout(()=>{t.className="toast"+(isErr?" err":"");},2600); }
 
+async function editResidence(p){
+  const present=[...new Set(PEOPLE.map(x=>(x.residence||"").trim()).filter(Boolean))];
+  const all=[...new Set([...HZ_CANON.map(c=>c.key),...present])];
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  const chips=all.map(c=>`<button class="tab" data-city="${esc(c)}" style="margin:3px 4px 0 0${p.residence===c?';border-color:var(--accent);color:var(--accent)':''}">${hzMeta(c).glyph} ${esc(c)}</button>`).join("");
+  ov.innerHTML=`<div class="picker"><div class="picker-head"><h3>Residence — ${esc(p.name)}</h3>
+    <div style="display:flex;flex-wrap:wrap;margin:6px 0 10px">${chips}</div>
+    <input id="r-in" type="text" placeholder="…or type a new city" style="${_IN}"></div>
+    <div class="picker-foot"><button class="tab" id="r-clear">Clear</button> <button class="tab" id="r-cancel">Cancel</button> <button class="tab" id="r-save" style="border-color:var(--accent);color:var(--accent)">Save</button></div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector("#r-in"); inp.focus();
+  const save=async(val)=>{ val=(val||"").trim(); ov.remove(); try{ await sbPatch("contacts","id",p.id,{residence:val||null}); p.residence=val||null; toast(val?("Residence: "+val):"Residence cleared"); if(currentPerson&&currentPerson.id===p.id)showCard(p); if(activeTab==="horizons")renderGeography(); }catch(e){ toast("Couldn\u2019t save",true); console.warn(e); } };
+  ov.querySelectorAll("[data-city]").forEach(b=>b.addEventListener("click",()=>save(b.dataset.city)));
+  ov.querySelector("#r-save").addEventListener("click",()=>save(inp.value));
+  ov.querySelector("#r-clear").addEventListener("click",()=>save(""));
+  ov.querySelector("#r-cancel").addEventListener("click",()=>ov.remove());
+  ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter")save(inp.value);});
+}
+
 function showCard(p){
   currentPerson=p;
   const byId=Object.fromEntries(PEOPLE.map(x=>[x.id,x]));
@@ -491,6 +571,14 @@ function showCard(p){
     <div style="margin-top:4px">✉ ${p.email?p.email:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="email" data-label="Email">✎</span></div>
     <div style="margin-top:4px">🏠 <strong>Household:</strong> ${p.household?p.household:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-household-btn">✎</span></div>
   </div></div>`;
+  const _penM = p.last_contact? Math.floor((Date.now()-new Date(p.last_contact))/2592000000) : null;
+  const _pen = (_penM!=null && _penM>=6);
+  const houseHTML=`<div class="info-section"><h3>📍 Of the House</h3><div style="font-size:13px;line-height:1.7">
+    <div>📍 <strong>Residence:</strong> ${p.residence?p.residence:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-residence-btn">✎</span></div>
+    <div style="margin-top:4px">🌒 <strong>Last heard from:</strong> ${p.last_contact?`${fmtDate(p.last_contact)} <span style="color:${_pen?'#C8945B':'var(--muted)'}">· ${_penM} ${_penM===1?'month':'months'} ago${_pen?' · in penumbra':''}</span>`:`<span style="color:var(--muted)">no correspondence recorded yet</span>`}</div>
+    ${p.allergies?`<div style="margin-top:4px">⚠ <strong>Allergies &amp; care:</strong> ${p.allergies}</div>`:""}
+    ${p.values_notes?`<div style="margin-top:4px">✦ <strong>Values &amp; traditions:</strong> ${p.values_notes}</div>`:""}
+  </div></div>`;
   document.getElementById("card-root").innerHTML=`<div class="card-drawer"><button class="back" id="card-x">← Back to the chronicle</button>
     <div class="info-photo">${p.photo?`<img src="${p.photo}" onerror="this.parentNode.innerHTML='👤'">`:"👤"}</div>
     <div style="text-align:center;margin:2px 0 10px"><span class="edit-link" id="photo-btn">📷 ${p.photo?'Change':'Add'} photo</span></div>
@@ -512,6 +600,7 @@ function showCard(p){
       ${factRow("🎁","Gift ideas",p.giftIdeas,"long_text_mm3vtdth",1)}
     </div></div>
     ${detailsHTML}
+    ${houseHTML}
     ${genList("Parents",parents,"👨‍👩")}
     <div class="info-section"><h3>💑 Partner <button class="btn-add" id="edit-partner-btn">${partner?'✎':'＋'}</button></h3>${partner?`<ul class="info-list"><li data-id="${partner.id}">${partner.name}</li></ul>`:`<span style="color:var(--muted);font-size:12px">No partner set</span>`}</div>
     ${genList("Children",children,"👶")}
@@ -522,6 +611,7 @@ function showCard(p){
       <div style="margin-top:8px"><a href="https://rezet-global.monday.com/boards/${CONTACTS_BOARD}/pulses/${p.id}" target="_blank" style="font-size:12px">Open in Monday →</a></div>
     </div></div>`;
   const root=document.getElementById("card-root");
+  const _dr=root.querySelector(".card-drawer"); if(_dr) _dr.classList.toggle("penumbra", _pen);
   document.getElementById("card-bd")?.addEventListener("click",closeCard);
   document.getElementById("card-x").addEventListener("click",closeCard);
   root.querySelectorAll("li[data-id]").forEach(li=>li.addEventListener("click",()=>{const t=byId[li.dataset.id];if(t)showCard(t);}));
@@ -533,6 +623,7 @@ function showCard(p){
   const g=id=>document.getElementById(id);
   g("edit-name-btn").addEventListener("click",()=>editName(p));
   g("edit-household-btn").addEventListener("click",()=>editHousehold(p));
+  const _erb=document.getElementById("edit-residence-btn"); if(_erb)_erb.addEventListener("click",()=>editResidence(p));
   g("add-circle-btn").addEventListener("click",()=>openCirclePicker(p));
   g("edit-nat").addEventListener("click",()=>editNationality(p));
   g("photo-btn").addEventListener("click",()=>pickPhoto(p));
