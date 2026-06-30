@@ -527,6 +527,24 @@ document.getElementById("content").addEventListener("click",e=>{
 
 function toast(msg,isErr){ let t=document.getElementById("toast"); if(!t){t=document.createElement("div");t.id="toast";document.body.appendChild(t);} t.textContent=msg; t.className="toast show"+(isErr?" err":""); clearTimeout(t._h); t._h=setTimeout(()=>{t.className="toast"+(isErr?" err":"");},2600); }
 
+async function editHouseField(p, col, label, kind){
+  const cur=p[col]||"";
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  const input = kind==='date' ? `<input id="hf-in" type="date" value="${esc(cur)}" style="${_IN}">`
+    : kind==='multiline' ? `<textarea id="hf-in" style="${_IN};min-height:90px;resize:vertical">${esc(cur)}</textarea>`
+    : `<input id="hf-in" type="text" value="${esc(cur)}" style="${_IN}">`;
+  ov.innerHTML=`<div class="picker" style="width:380px"><div class="picker-head"><h3>${label} — ${esc(p.name)}</h3>${input}</div>
+    <div class="picker-foot"><button class="toggle" id="hf-clear">Clear</button> <button class="toggle" id="hf-cancel">Cancel</button> <button class="toggle on" id="hf-save">Save</button></div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector("#hf-in"); inp.focus();
+  const save=async(val)=>{ val=(val==null?"":String(val)).trim(); ov.remove(); try{ await sbPatch("contacts","id",p.id,{[col]:val||null}); p[col]=val||null; toast(label+" saved \u2713"); if(currentPerson&&currentPerson.id===p.id)showCard(p); if(activeTab==="today")renderToday(); if(activeTab==="horizons")renderGeography(); }catch(e){ toast("Couldn\u2019t save",true); console.warn(e); } };
+  ov.querySelector("#hf-save").addEventListener("click",()=>save(inp.value));
+  ov.querySelector("#hf-clear").addEventListener("click",()=>save(""));
+  ov.querySelector("#hf-cancel").addEventListener("click",()=>ov.remove());
+  ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+  inp.addEventListener("keydown",e=>{ if(e.key==="Enter"&&kind!=='multiline')save(inp.value); });
+}
+
 async function editResidence(p){
   const present=[...new Set(PEOPLE.map(x=>(x.residence||"").trim()).filter(Boolean))];
   const all=[...new Set([...HZ_CANON.map(c=>c.key),...present])];
@@ -575,9 +593,9 @@ function showCard(p){
   const _pen = (_penM!=null && _penM>=6);
   const houseHTML=`<div class="info-section"><h3>📍 Of the House</h3><div style="font-size:13px;line-height:1.7">
     <div>📍 <strong>Residence:</strong> ${p.residence?p.residence:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-residence-btn">✎</span></div>
-    <div style="margin-top:4px">🌒 <strong>Last heard from:</strong> ${p.last_contact?`${fmtDate(p.last_contact)} <span style="color:${_pen?'#C8945B':'var(--muted)'}">· ${_penM} ${_penM===1?'month':'months'} ago${_pen?' · in penumbra':''}</span>`:`<span style="color:var(--muted)">no correspondence recorded yet</span>`}</div>
-    ${p.allergies?`<div style="margin-top:4px">⚠ <strong>Allergies &amp; care:</strong> ${p.allergies}</div>`:""}
-    ${p.values_notes?`<div style="margin-top:4px">✦ <strong>Values &amp; traditions:</strong> ${p.values_notes}</div>`:""}
+    <div style="margin-top:4px">🌒 <strong>Last heard from:</strong> ${p.last_contact?`${fmtDate(p.last_contact)} <span style="color:${_pen?'#C8945B':'var(--muted)'}">· ${_penM} ${_penM===1?'month':'months'} ago${_pen?' · in penumbra':''}</span>`:`<span style="color:var(--muted)">no correspondence recorded yet</span>`} <span class="edit-link" id="edit-lastcontact-btn">✎</span></div>
+    <div style="margin-top:4px">⚠ <strong>Allergies &amp; care:</strong> ${p.allergies?p.allergies:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-allergies-btn">✎</span></div>
+    <div style="margin-top:4px">✦ <strong>Values &amp; traditions:</strong> ${p.values_notes?p.values_notes:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-values-btn">✎</span></div>
   </div></div>`;
   document.getElementById("card-root").innerHTML=`<div class="card-drawer"><button class="back" id="card-x">← Back to the chronicle</button>
     <div class="info-photo">${p.photo?`<img src="${p.photo}" onerror="this.parentNode.innerHTML='👤'">`:"👤"}</div>
@@ -624,6 +642,9 @@ function showCard(p){
   g("edit-name-btn").addEventListener("click",()=>editName(p));
   g("edit-household-btn").addEventListener("click",()=>editHousehold(p));
   const _erb=document.getElementById("edit-residence-btn"); if(_erb)_erb.addEventListener("click",()=>editResidence(p));
+  const _elc=document.getElementById("edit-lastcontact-btn"); if(_elc)_elc.addEventListener("click",()=>editHouseField(p,"last_contact","Last contact","date"));
+  const _eal=document.getElementById("edit-allergies-btn"); if(_eal)_eal.addEventListener("click",()=>editHouseField(p,"allergies","Allergies & care","text"));
+  const _eva=document.getElementById("edit-values-btn"); if(_eva)_eva.addEventListener("click",()=>editHouseField(p,"values_notes","Values & traditions","multiline"));
   g("add-circle-btn").addEventListener("click",()=>openCirclePicker(p));
   g("edit-nat").addEventListener("click",()=>editNationality(p));
   g("photo-btn").addEventListener("click",()=>pickPhoto(p));
