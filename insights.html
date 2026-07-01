@@ -113,6 +113,7 @@
     <div class="tabs" id="tabs">
       <div class="tab active" data-tab="overview">At a Glance</div>
       <div class="tab" data-tab="today">Today</div>
+      <div class="tab" data-tab="journal">The Journal</div>
       <div class="tab" data-tab="calendar">Birthdays</div>
       <div class="tab" data-tab="anniversaries">Anniversaries</div>
       <div class="tab" data-tab="health">The Roll</div>
@@ -356,7 +357,7 @@ function renderToday(){
     if(partner&&partner.anniversary===p.anniversary){ seen.add(partner.id); label=`${p.name.split(" ").slice(-1)[0]} & ${partner.name.split(" ").slice(-1)[0]} ${p.name.split(" ")[0]}`; }
     seen.add(p.id); an.push({p,...o,kind:"anniversary",label}); });
   const events=[...bd,...an].sort((a,b)=>a.days-b.days);
-  const penumbra=PEOPLE.filter(p=>p.last_contact).map(p=>({p,d:Math.floor((TODAY-new Date(p.last_contact))/86400000)})).filter(x=>x.d>=180).sort((a,b)=>b.d-a.d).slice(0,12);
+  const penumbra=PEOPLE.filter(p=>p.last_contact).map(p=>({p,d:Math.floor((TODAY-new Date(p.last_contact))/86400000)})).filter(x=>x.d>(x.p.cadence_days||180)).sort((a,b)=>b.d-a.d).slice(0,12);
   const evRow=e=>`<div class="bday-row">${avatar(e.p)}<div><div style="font-weight:600">${e.kind==="anniversary"?"💍":"🎂"} <span class="row-link" data-pid="${e.p.id}">${e.label}</span> <span class="bday-soon">${e.days===0?"today":e.days===1?"tomorrow":"in "+e.days+"d"}</span></div><div style="font-size:11px;color:var(--muted)">${e.kind==="anniversary"?"Anniversary":"Birthday"} · ${e.p.circle.label}</div></div></div>`;
   const penRow=x=>`<div class="bday-row">${avatar(x.p)}<div><div style="font-weight:600"><span class="row-link" data-pid="${x.p.id}">${x.p.name}</span></div><div style="font-size:11px;color:var(--muted)">last heard from · ${x.d<60?x.d+" days":Math.round(x.d/30)+" months"} ago</div></div></div>`;
   const todayStr=TODAY.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
@@ -394,7 +395,35 @@ function renderGeography(){
     </div><div class="grid">${html}</div>`;
 }
 
-const TABS={overview:renderOverview,today:renderToday,calendar:renderCalendar,anniversaries:renderAnniversaries,health:renderHealth,circles:renderCircles,horizons:renderGeography};
+async function renderJournal(){
+  const C=document.getElementById("content");
+  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Journal</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the living chronicle of the House, gathered through time</div></div><div id="journal-feed" class="card wide" style="font-family:'EB Garamond',serif;font-size:14px"><div style="color:var(--muted);padding:8px">Gathering the chronicle…</div></div>`;
+  const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
+  try{
+    const [ints,gifts]=await Promise.all([
+      sbGet("interactions?select=id,channel,on_date,note,contact_id&order=on_date.desc,id.desc&limit=400"),
+      sbGet("gifts?select=id,direction,item,occasion,on_date,contact_id&order=on_date.desc,id.desc&limit=400")
+    ]);
+    const ev=[];
+    ints.forEach(r=>ev.push({date:r.on_date, icon:(CH_META[r.channel]||"•"), pid:r.contact_id, text:r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`}));
+    gifts.forEach(r=>ev.push({date:r.on_date, icon:"🎁", pid:r.contact_id, text:`${r.direction==="given"?"Gave":"Received"} ${esc(r.item)}${r.occasion?` <span style="color:var(--muted)">· ${esc(r.occasion)}</span>`:""}`}));
+    ev.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+    const feed=document.getElementById("journal-feed"); if(!feed)return;
+    if(!ev.length){ feed.innerHTML=`<div style="color:var(--muted);padding:10px;line-height:1.7">The chronicle is still blank.<br>Open a soul — here or in The Map — and record a moment (a call, a visit, a keepsake). Each one will appear here, ordered through time, as the living memory of the House.</div>`; return; }
+    let html="", curKey="";
+    ev.forEach(e=>{
+      const d=e.date?new Date(e.date+"T00:00:00"):null;
+      const key=d?`${d.getFullYear()}-${d.getMonth()}`:"und";
+      if(key!==curKey){ curKey=key; const ml=d?`${MONTHS[d.getMonth()]} ${d.getFullYear()}`:"Undated"; html+=`<div style="font-family:'Cinzel',serif;color:var(--accent);font-size:13px;letter-spacing:.06em;margin:18px 0 6px;border-bottom:1px solid var(--line);padding-bottom:5px">${ml}</div>`; }
+      const per=byId[e.pid];
+      const name=per?`<span class="row-link" data-pid="${per.id}" style="font-weight:600">${per.name}</span>`:`<span style="color:var(--muted)">Someone</span>`;
+      html+=`<div style="display:flex;gap:11px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">${e.icon}</span><div style="flex:1"><div style="color:var(--soft);line-height:1.5">${name} — ${e.text}</div><div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`;
+    });
+    feed.innerHTML=html;
+  }catch(err){ const feed=document.getElementById("journal-feed"); if(feed)feed.innerHTML=`<div style="color:var(--muted);padding:10px">Couldn't gather the chronicle just now.</div>`; console.warn(err); }
+}
+
+const TABS={overview:renderOverview,today:renderToday,journal:renderJournal,calendar:renderCalendar,anniversaries:renderAnniversaries,health:renderHealth,circles:renderCircles,horizons:renderGeography};
 let activeTab="overview";
 document.querySelectorAll(".tab").forEach(t=>{
   t.addEventListener("click",()=>{
@@ -481,7 +510,7 @@ async function liveRefresh(){
         childrenNotes:c.children_notes, pets:c.pets, dietary:c.dietary, tags:[],
         phone:c.phone, email:c.email, location:c.address,
         school:c.school, schoolYear:c.school_year, classKid:c.class_kid,
-        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion, residence:c.residence, last_contact:c.last_contact, is_female:c.is_female, allergies:c.allergies, values_notes:c.values_notes };
+        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion, residence:c.residence, last_contact:c.last_contact, is_female:c.is_female, allergies:c.allergies, values_notes:c.values_notes, cadence_days:c.cadence_days };
     });
     const byId=Object.fromEntries(fresh.map(p=>[p.id,p]));
     for(const p of fresh){ if(p.partnerId&&byId[p.partnerId]){ const q=byId[p.partnerId]; const best=Math.min(p.closeness.tier,q.closeness.tier); const lbl=p.closeness.tier===best?p.closeness.label:q.closeness.label; p.closeness=q.closeness={tier:best,label:lbl}; } }
@@ -521,7 +550,7 @@ function closeCard(){ currentPerson=null; document.getElementById("card-root").i
 function afterEdit(person){ if(TABS[activeTab])TABS[activeTab](); if(currentPerson&&person&&currentPerson.id===person.id)showCard(person); }
 // Delegated clicks: ANY [data-pid] opens the person card; [data-gototab] switches tab.
 document.getElementById("content").addEventListener("click",e=>{
-  const pl=e.target.closest("[data-pid]"); if(pl){ const p=PEOPLE.find(x=>x.id==pl.dataset.pid); if(p)showCard(p); return; }
+  const pl=e.target.closest("[data-pid]"); if(pl){ const p=PEOPLE.find(x=>x.id==pl.dataset.pid); if(p){ if(currentPerson&&currentPerson.id==p.id&&document.querySelector(".card-drawer")){ closeCard(); } else { showCard(p); } } return; }
   const gt=e.target.closest("[data-gototab]"); if(gt){ const t=[...document.querySelectorAll('.tab')].find(x=>x.dataset.tab===gt.dataset.gototab); if(t)t.click(); }
 });
 
@@ -543,6 +572,40 @@ async function editHouseField(p, col, label, kind){
   ov.querySelector("#hf-cancel").addEventListener("click",()=>ov.remove());
   ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"&&kind!=='multiline')save(inp.value); });
+}
+
+function coolOf(x){ if(!x||!x.last_contact)return false; const days=Math.floor((Date.now()-new Date(x.last_contact))/86400000); return days>(x.cadence_days||180); }
+function _today(){ const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; }
+const CH_META={call:"📞",visit:"☕",message:"✉️",letter:"✍️",email:"✉️",gathering:"🎉",other:"•"};
+async function logMoment(who, channel){
+  const note=prompt(`A note for this ${channel}? (optional — leave blank to just log it)`,"");
+  if(note===null)return;
+  try{ await sbInsert("interactions",[{contact_id:who.id, channel, on_date:_today(), note:note||null}]); who.last_contact=_today(); toast("Moment recorded ✓"); if(currentPerson&&currentPerson.id===who.id)showCard(who); if(activeTab==="today")renderToday(); if(activeTab==="horizons")renderGeography(); }
+  catch(e){ toast("Couldn’t record",true); console.warn(e); }
+}
+async function setCadence(who, days){
+  const val=days===0?null:days;
+  try{ await sbPatch("contacts","id",who.id,{cadence_days:val}); who.cadence_days=val; toast(val?("Cadence: every "+val+" days"):"Cadence cleared"); if(currentPerson&&currentPerson.id===who.id)showCard(who); if(activeTab==="today")renderToday(); if(activeTab==="horizons")renderGeography(); }
+  catch(e){ toast("Couldn’t save",true); console.warn(e); }
+}
+async function loadMoments(who){
+  const el=document.getElementById("moments-list"); if(!el)return;
+  try{ const rows=await sbGet(`interactions?contact_id=eq.${who.id}&order=on_date.desc,id.desc&limit=25`);
+    el.innerHTML=rows.length? rows.map(r=>`<div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line,#2a2a24)"><span>${CH_META[r.channel]||"•"}</span><div style="flex:1"><div style="color:var(--soft,#cfc9b8)">${r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`}</div><div style="font-size:10px;color:var(--muted);font-family:var(--f-data,monospace)">${fmtDate(r.on_date)}</div></div></div>`).join("") : `<span style="color:var(--muted)">No moments yet — tap a button above to begin the chronicle.</span>`;
+  }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load the chronicle.</span>`; console.warn(e); }
+}
+async function addGift(who){
+  const item=prompt("Keepsake — what was it? (e.g. a leather journal)"); if(!item)return;
+  const dir=confirm("Press OK if we GAVE it to them · Cancel if we RECEIVED it")?"given":"received";
+  const occasion=prompt("Occasion? (optional, e.g. Christmas 2025)","")||null;
+  try{ await sbInsert("gifts",[{contact_id:who.id, direction:dir, item, occasion, on_date:_today()}]); toast("Keepsake noted ✓"); loadGifts(who); }
+  catch(e){ toast("Couldn’t save",true); console.warn(e); }
+}
+async function loadGifts(who){
+  const el=document.getElementById("gifts-list"); if(!el)return;
+  try{ const rows=await sbGet(`gifts?contact_id=eq.${who.id}&order=id.desc&limit=25`);
+    el.innerHTML=rows.length? rows.map(r=>`<div style="padding:4px 0;border-top:1px solid var(--line,#2a2a24)"><span style="color:var(--soft,#cfc9b8)">${r.direction==="given"?"→ we gave":"← we received"}: ${esc(r.item)}</span>${r.occasion?` <span style="color:var(--muted);font-size:11px">· ${esc(r.occasion)}</span>`:""}</div>`).join("") : `<span style="color:var(--muted)">No keepsakes recorded yet — tap ＋ add.</span>`;
+  }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load keepsakes.</span>`; console.warn(e); }
 }
 
 async function editResidence(p){
@@ -584,19 +647,35 @@ function showCard(p){
     ${statusRow("School year",p.schoolYear,"color_mm3vgj62","schoolYear")}
     ${statusRow("Class with our kid",p.classKid,"color_mm3vqpx1","classKid")}
     ${(p.is_female||p.maidenName)?`<div style="margin-top:4px">👰 <strong>Maiden name:</strong> ${p.maidenName?p.maidenName:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-col="text_mm4rgpf" data-label="Maiden name" data-multi="0">✎</span></div>`:""}
-    <div style="margin-top:4px"><strong>Age:</strong> ${(p.age!=null&&p.age!=="")?p.age:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-num="numeric_mm3wz3fb" data-label="Age">✎</span></div>
+    <div style="margin-top:4px"><strong>Age:</strong> ${ageOf(p)!=null?`${ageOf(p)}${p.birthday?` <span style="color:var(--muted);font-size:11px">· from birthday</span>`:""}`:`<span style="color:var(--muted)">—</span>`}${p.birthday?"":` <span class="edit-link" data-num="numeric_mm3wz3fb" data-label="Age">✎</span>`}</div>
     <div style="margin-top:4px">📞 ${p.phone?p.phone:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="phone" data-label="Phone">✎</span></div>
     <div style="margin-top:4px">✉ ${p.email?p.email:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="email" data-label="Email">✎</span></div>
     <div style="margin-top:4px">🏠 <strong>Household:</strong> ${p.household?p.household:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-household-btn">✎</span></div>
   </div></div>`;
-  const _penM = p.last_contact? Math.floor((Date.now()-new Date(p.last_contact))/2592000000) : null;
-  const _pen = (_penM!=null && _penM>=6);
+  const _lcD = p.last_contact? Math.floor((Date.now()-new Date(p.last_contact))/86400000) : null;
+  const _penM = _lcD!=null? Math.floor(_lcD/30) : null;
+  const _pen = (_lcD!=null && _lcD>(p.cadence_days||180));
   const houseHTML=`<div class="info-section"><h3>📍 Of the House</h3><div style="font-size:13px;line-height:1.7">
     <div>📍 <strong>Residence:</strong> ${p.residence?p.residence:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-residence-btn">✎</span></div>
     <div style="margin-top:4px">🌒 <strong>Last heard from:</strong> ${p.last_contact?`${fmtDate(p.last_contact)} <span style="color:${_pen?'#C8945B':'var(--muted)'}">· ${_penM} ${_penM===1?'month':'months'} ago${_pen?' · in penumbra':''}</span>`:`<span style="color:var(--muted)">no correspondence recorded yet</span>`} <span class="edit-link" id="edit-lastcontact-btn">✎</span></div>
     <div style="margin-top:4px">⚠ <strong>Allergies &amp; care:</strong> ${p.allergies?p.allergies:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-allergies-btn">✎</span></div>
     <div style="margin-top:4px">✦ <strong>Values &amp; traditions:</strong> ${p.values_notes?p.values_notes:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-values-btn">✎</span></div>
   </div></div>`;
+  const _cad=p.cadence_days;
+  const _cadOpt=(days,label)=>{ const on=(_cad===days||(days===0&&!_cad)); return `<button class="cad-opt" data-cad="${days}" style="border:1px solid ${on?'var(--gold-bright,#E3C786)':'var(--line,#2a2a24)'};background:${on?'rgba(242,236,221,.08)':'transparent'};color:var(--soft,#cfc9b8);font-size:12px;padding:5px 9px;border-radius:8px;cursor:pointer;font-family:inherit">${label}</button>`; };
+  const _BS="border:1px solid var(--line,#2a2a24);background:transparent;color:var(--soft,#cfc9b8);font-size:12px;padding:6px 10px;border-radius:8px;cursor:pointer;font-family:inherit";
+  const momentsHTML=`<div class="info-section"><h3>✒ Correspondence</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
+      <button class="mom-btn" data-ch="call" style="${_BS}">📞 Call</button>
+      <button class="mom-btn" data-ch="visit" style="${_BS}">☕ Visit</button>
+      <button class="mom-btn" data-ch="message" style="${_BS}">✉️ Message</button>
+      <button class="mom-btn" data-ch="letter" style="${_BS}">✍️ Note</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Desired cadence</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px">${_cadOpt(30,"Monthly")}${_cadOpt(90,"Quarterly")}${_cadOpt(180,"Twice a year")}${_cadOpt(365,"Yearly")}${_cadOpt(0,"None")}</div>
+    <div id="moments-list" style="font-size:12px;color:var(--muted)">Loading the chronicle…</div>
+  </div>`;
+  const giftsHTML=`<div class="info-section"><h3>🎁 Keepsakes <span class="edit-link" id="add-gift-btn" style="cursor:pointer">＋ add</span></h3><div id="gifts-list" style="font-size:12px;color:var(--muted)">Loading…</div></div>`;
   document.getElementById("card-root").innerHTML=`<div class="card-drawer"><button class="back" id="card-x">← Back to the chronicle</button>
     <div class="info-photo">${p.photo?`<img src="${p.photo}" onerror="this.parentNode.innerHTML='👤'">`:"👤"}</div>
     <div style="text-align:center;margin:2px 0 10px"><span class="edit-link" id="photo-btn">📷 ${p.photo?'Change':'Add'} photo</span></div>
@@ -619,6 +698,8 @@ function showCard(p){
     </div></div>
     ${detailsHTML}
     ${houseHTML}
+    ${momentsHTML}
+    ${giftsHTML}
     ${genList("Parents",parents,"👨‍👩")}
     <div class="info-section"><h3>💑 Partner <button class="btn-add" id="edit-partner-btn">${partner?'✎':'＋'}</button></h3>${partner?`<ul class="info-list"><li data-id="${partner.id}">${partner.name}</li></ul>`:`<span style="color:var(--muted);font-size:12px">No partner set</span>`}</div>
     ${genList("Children",children,"👶")}
@@ -645,6 +726,10 @@ function showCard(p){
   const _elc=document.getElementById("edit-lastcontact-btn"); if(_elc)_elc.addEventListener("click",()=>editHouseField(p,"last_contact","Last contact","date"));
   const _eal=document.getElementById("edit-allergies-btn"); if(_eal)_eal.addEventListener("click",()=>editHouseField(p,"allergies","Allergies & care","text"));
   const _eva=document.getElementById("edit-values-btn"); if(_eva)_eva.addEventListener("click",()=>editHouseField(p,"values_notes","Values & traditions","multiline"));
+  document.querySelectorAll(".mom-btn").forEach(b=>b.addEventListener("click",()=>logMoment(p,b.dataset.ch)));
+  document.querySelectorAll(".cad-opt").forEach(b=>b.addEventListener("click",()=>setCadence(p,Number(b.dataset.cad))));
+  const _agb=document.getElementById("add-gift-btn"); if(_agb)_agb.addEventListener("click",()=>addGift(p));
+  loadMoments(p); loadGifts(p);
   g("add-circle-btn").addEventListener("click",()=>openCirclePicker(p));
   g("edit-nat").addEventListener("click",()=>editNationality(p));
   g("photo-btn").addEventListener("click",()=>pickPhoto(p));

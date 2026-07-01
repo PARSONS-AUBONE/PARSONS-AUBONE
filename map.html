@@ -236,6 +236,7 @@ const cy = cytoscape({
       "color":"#C7C0AC","text-valign":"bottom","text-margin-y":5,"text-opacity":0,
       "transition-property":"opacity, border-color, border-width, text-opacity","transition-duration":"150ms" }},
     {selector:"node[partner = 1]", style:{ "border-color":"#C0A35F","border-width":2.5 }},
+    {selector:"node[cool = 1]", style:{ "border-color":"#C8945B","border-width":2.5 }},
     {selector:"node.hl", style:{ "text-opacity":1 }},
     {selector:"node.focus", style:{ "border-color":"#E3C786","border-width":3.5,"text-opacity":1,"color":"#F2ECDD","z-index":9999 }},
     {selector:"node.dim", style:{ "opacity":0.12 }},
@@ -247,7 +248,7 @@ const cy = cytoscape({
   ],
   layout:{name:"preset"}
 });
-cy.on("tap","node", e=>{ const pr=PEOPLE.find(x=>String(x.id)===e.target.id()); if(pr) selectPerson(pr); });
+cy.on("tap","node", e=>{ const pr=PEOPLE.find(x=>String(x.id)===e.target.id()); if(!pr)return; const pf=document.getElementById("profile"); if(currentPerson&&currentPerson.id===pr.id&&pf&&pf.classList.contains("open")){ pf.classList.remove("open"); cy.elements().removeClass("focus dim"); currentPerson=null; } else { selectPerson(pr); } });
 cy.on("mouseover","node", e=>e.target.addClass("hl"));
 cy.on("mouseout","node", e=>e.target.removeClass("hl"));
 window.addEventListener("resize", ()=>{ try{cy.resize();}catch(_){ } });
@@ -373,7 +374,7 @@ function renderGraph(){
   const visible=PEOPLE.filter(passesFilters);
   const visIds=new Set(visible.map(p=>p.id));
   const links=buildLinks().filter(l=>{const s=typeof l.source==="object"?l.source.id:l.source,tt=typeof l.target==="object"?l.target.id:l.target;return visIds.has(s)&&visIds.has(tt);});
-  const els=visible.map(p=>({ data:{ id:String(p.id), label:shortLabel(p), r:nodeRadius(p)*2, col:desat((p.circle||{}).colour), partner:p.partnerId?1:0, residence:p.residence||"" } }));
+  const els=visible.map(p=>({ data:{ id:String(p.id), label:shortLabel(p), r:nodeRadius(p)*2, col:desat((p.circle||{}).colour), partner:p.partnerId?1:0, residence:p.residence||"", cool:coolOf(p)?1:0 } }));
   links.forEach((l,i)=>{ const s=String(typeof l.source==="object"?l.source.id:l.source), tt=String(typeof l.target==="object"?l.target.id:l.target);
     els.push({ data:{ id:"x"+i, source:s, target:tt,
       lcol:l.type==="partner"?"#C9577F":l.type==="household"?"#C0A35F":l.type==="parent"?"#9A7B3F":"#CDBF9C",
@@ -504,20 +505,36 @@ function selectPerson(d){
     ${statusRow("School year",d.schoolYear,"color_mm3vgj62","schoolYear")}
     ${statusRow("Class with our kid",d.classKid,"color_mm3vqpx1","classKid")}
     ${(d.is_female||d.maidenName)?`<div style="margin-top:4px">👰 <strong>Maiden name:</strong> ${d.maidenName?d.maidenName:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-col="text_mm4rgpf" data-label="Maiden name" data-multi="0">✎</span></div>`:""}
-    <div style="margin-top:4px"><strong>Age:</strong> ${(d.age!=null&&d.age!=="")?d.age:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-num="numeric_mm3wz3fb" data-label="Age">✎</span></div>
+    <div style="margin-top:4px"><strong>Age:</strong> ${ageOf(d)!=null?`${ageOf(d)}${d.birthday?` <span style="color:var(--muted);font-size:11px">· from birthday</span>`:""}`:`<span style="color:var(--muted)">—</span>`}${d.birthday?"":` <span class="edit-link" data-num="numeric_mm3wz3fb" data-label="Age">✎</span>`}</div>
     <div style="margin-top:4px">📞 ${d.phone?d.phone:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="phone" data-label="Phone">✎</span></div>
     <div style="margin-top:4px">✉ ${d.email?d.email:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="email" data-label="Email">✎</span></div>
     <div style="margin-top:4px">🏠 <strong>Household:</strong> ${d.household?d.household:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-household-btn">✎</span></div>
   </div></div>`;
 
-  const _penM = d.last_contact? Math.floor((Date.now()-new Date(d.last_contact))/2592000000) : null;
-  const _pen = (_penM!=null && _penM>=6);
+  const _lcD = d.last_contact? Math.floor((Date.now()-new Date(d.last_contact))/86400000) : null;
+  const _penM = _lcD!=null? Math.floor(_lcD/30) : null;
+  const _pen = (_lcD!=null && _lcD>(d.cadence_days||180));
   const houseHTML=`<div class="info-section"><h3>📍 Of the House</h3><div style="font-size:13px;line-height:1.7">
     <div>📍 <strong>Residence:</strong> ${d.residence?d.residence:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-residence-btn">✎</span></div>
     <div style="margin-top:4px">🌒 <strong>Last heard from:</strong> ${d.last_contact?`${fmtDate(d.last_contact)} <span style="color:${_pen?'#C8945B':'var(--muted)'}">· ${_penM} ${_penM===1?'month':'months'} ago${_pen?' · in penumbra':''}</span>`:`<span style="color:var(--muted)">no correspondence recorded yet</span>`} <span class="edit-link" id="edit-lastcontact-btn">✎</span></div>
     <div style="margin-top:4px">⚠ <strong>Allergies &amp; care:</strong> ${d.allergies?d.allergies:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-allergies-btn">✎</span></div>
     <div style="margin-top:4px">✦ <strong>Values &amp; traditions:</strong> ${d.values_notes?d.values_notes:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-values-btn">✎</span></div>
   </div></div>`;
+  const _cad=d.cadence_days;
+  const _cadOpt=(days,label)=>{ const on=(_cad===days||(days===0&&!_cad)); return `<button class="cad-opt" data-cad="${days}" style="border:1px solid ${on?'var(--gold-bright,#E3C786)':'var(--line,#2a2a24)'};background:${on?'rgba(242,236,221,.08)':'transparent'};color:var(--soft,#cfc9b8);font-size:12px;padding:5px 9px;border-radius:8px;cursor:pointer;font-family:inherit">${label}</button>`; };
+  const _BS="border:1px solid var(--line,#2a2a24);background:transparent;color:var(--soft,#cfc9b8);font-size:12px;padding:6px 10px;border-radius:8px;cursor:pointer;font-family:inherit";
+  const momentsHTML=`<div class="info-section"><h3>✒ Correspondence</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
+      <button class="mom-btn" data-ch="call" style="${_BS}">📞 Call</button>
+      <button class="mom-btn" data-ch="visit" style="${_BS}">☕ Visit</button>
+      <button class="mom-btn" data-ch="message" style="${_BS}">✉️ Message</button>
+      <button class="mom-btn" data-ch="letter" style="${_BS}">✍️ Note</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Desired cadence</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px">${_cadOpt(30,"Monthly")}${_cadOpt(90,"Quarterly")}${_cadOpt(180,"Twice a year")}${_cadOpt(365,"Yearly")}${_cadOpt(0,"None")}</div>
+    <div id="moments-list" style="font-size:12px;color:var(--muted)">Loading the chronicle…</div>
+  </div>`;
+  const giftsHTML=`<div class="info-section"><h3>🎁 Keepsakes <span class="edit-link" id="add-gift-btn" style="cursor:pointer">＋ add</span></h3><div id="gifts-list" style="font-size:12px;color:var(--muted)">Loading…</div></div>`;
   const infoEl=document.getElementById("info");
   infoEl.innerHTML=`<div style="margin-top:10px">
     <div class="info-photo">${d.photo?`<img src="${d.photo}" onerror="this.parentNode.innerHTML='👤'" alt="">`:"👤"}</div>
@@ -532,6 +549,8 @@ function selectPerson(d){
     ${bioHTML}
     ${detailsHTML}
     ${houseHTML}
+    ${momentsHTML}
+    ${giftsHTML}
     ${genSection("Great-grandparents",tree.greatGP,"⬆")}
     ${genSection("Grandparents",tree.grandparents,"👴")}
     ${genSection("Parents",tree.parents,"👨‍👩")}
@@ -573,6 +592,10 @@ function selectPerson(d){
   const _elc=document.getElementById("edit-lastcontact-btn"); if(_elc)_elc.addEventListener("click",()=>editHouseField(d,"last_contact","Last contact","date"));
   const _eal=document.getElementById("edit-allergies-btn"); if(_eal)_eal.addEventListener("click",()=>editHouseField(d,"allergies","Allergies & care","text"));
   const _eva=document.getElementById("edit-values-btn"); if(_eva)_eva.addEventListener("click",()=>editHouseField(d,"values_notes","Values & traditions","multiline"));
+  document.querySelectorAll(".mom-btn").forEach(b=>b.addEventListener("click",()=>logMoment(d,b.dataset.ch)));
+  document.querySelectorAll(".cad-opt").forEach(b=>b.addEventListener("click",()=>setCadence(d,Number(b.dataset.cad))));
+  const _agb=document.getElementById("add-gift-btn"); if(_agb)_agb.addEventListener("click",()=>addGift(d));
+  loadMoments(d); loadGifts(d);
   const enb2=document.getElementById("edit-name-btn"); if(enb2)enb2.addEventListener("click",()=>editName(d));
 }
 
@@ -855,7 +878,7 @@ async function refreshFromMonday(){
         childrenNotes:c.children_notes, pets:c.pets, dietary:c.dietary, tags:[],
         phone:c.phone, email:c.email, location:c.address,
         school:c.school, schoolYear:c.school_year, classKid:c.class_kid,
-        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion, residence:c.residence, last_contact:c.last_contact, is_female:c.is_female, allergies:c.allergies, values_notes:c.values_notes };
+        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion, residence:c.residence, last_contact:c.last_contact, is_female:c.is_female, allergies:c.allergies, values_notes:c.values_notes, cadence_days:c.cadence_days };
     });
     const byId=Object.fromEntries(fresh.map(p=>[p.id,p]));
     for(const p of fresh){ if(p.partnerId&&byId[p.partnerId]){ const q=byId[p.partnerId]; const best=Math.min(p.closeness.tier,q.closeness.tier); const lbl=p.closeness.tier===best?p.closeness.label:q.closeness.label; p.closeness=q.closeness={tier:best,label:lbl}; } }
@@ -1074,6 +1097,40 @@ async function editHouseField(d, col, label, kind){
   ov.querySelector("#hf-cancel").addEventListener("click",()=>ov.remove());
   ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"&&kind!=='multiline')save(inp.value); });
+}
+
+function coolOf(x){ if(!x||!x.last_contact)return false; const days=Math.floor((Date.now()-new Date(x.last_contact))/86400000); return days>(x.cadence_days||180); }
+function _today(){ const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; }
+const CH_META={call:"📞",visit:"☕",message:"✉️",letter:"✍️",email:"✉️",gathering:"🎉",other:"•"};
+async function logMoment(who, channel){
+  const note=prompt(`A note for this ${channel}? (optional — leave blank to just log it)`,"");
+  if(note===null)return;
+  try{ await sbInsert("interactions",[{contact_id:who.id, channel, on_date:_today(), note:note||null}]); who.last_contact=_today(); toast("Moment recorded ✓"); renderGraph(); if(currentPerson&&currentPerson.id===who.id)selectPerson(who); }
+  catch(e){ toast("Couldn’t record",true); console.warn(e); }
+}
+async function setCadence(who, days){
+  const val=days===0?null:days;
+  try{ await sbPatch("contacts","id",who.id,{cadence_days:val}); who.cadence_days=val; toast(val?("Cadence: every "+val+" days"):"Cadence cleared"); renderGraph(); if(currentPerson&&currentPerson.id===who.id)selectPerson(who); }
+  catch(e){ toast("Couldn’t save",true); console.warn(e); }
+}
+async function loadMoments(who){
+  const el=document.getElementById("moments-list"); if(!el)return;
+  try{ const rows=await sbGet(`interactions?contact_id=eq.${who.id}&order=on_date.desc,id.desc&limit=25`);
+    el.innerHTML=rows.length? rows.map(r=>`<div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line,#2a2a24)"><span>${CH_META[r.channel]||"•"}</span><div style="flex:1"><div style="color:var(--soft,#cfc9b8)">${r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`}</div><div style="font-size:10px;color:var(--muted);font-family:var(--f-data,monospace)">${fmtDate(r.on_date)}</div></div></div>`).join("") : `<span style="color:var(--muted)">No moments yet — tap a button above to begin the chronicle.</span>`;
+  }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load the chronicle.</span>`; console.warn(e); }
+}
+async function addGift(who){
+  const item=prompt("Keepsake — what was it? (e.g. a leather journal)"); if(!item)return;
+  const dir=confirm("Press OK if we GAVE it to them · Cancel if we RECEIVED it")?"given":"received";
+  const occasion=prompt("Occasion? (optional, e.g. Christmas 2025)","")||null;
+  try{ await sbInsert("gifts",[{contact_id:who.id, direction:dir, item, occasion, on_date:_today()}]); toast("Keepsake noted ✓"); loadGifts(who); }
+  catch(e){ toast("Couldn’t save",true); console.warn(e); }
+}
+async function loadGifts(who){
+  const el=document.getElementById("gifts-list"); if(!el)return;
+  try{ const rows=await sbGet(`gifts?contact_id=eq.${who.id}&order=id.desc&limit=25`);
+    el.innerHTML=rows.length? rows.map(r=>`<div style="padding:4px 0;border-top:1px solid var(--line,#2a2a24)"><span style="color:var(--soft,#cfc9b8)">${r.direction==="given"?"→ we gave":"← we received"}: ${esc(r.item)}</span>${r.occasion?` <span style="color:var(--muted);font-size:11px">· ${esc(r.occasion)}</span>`:""}</div>`).join("") : `<span style="color:var(--muted)">No keepsakes recorded yet — tap ＋ add.</span>`;
+  }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load keepsakes.</span>`; console.warn(e); }
 }
 
 async function editResidence(d){
