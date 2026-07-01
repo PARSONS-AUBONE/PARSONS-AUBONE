@@ -505,7 +505,11 @@ function renderHorizons(){
 }
 
 const _imgCache={};
+function _initials(name){ const parts=(name||"").replace(/\([^)]*\)/g,"").replace(/"[^"]+"/g,"").trim().split(/\s+/).filter(Boolean); if(parts.length>=2) return (parts[1][0]+parts[0][0]).toUpperCase(); return (parts[0]||"\u00b7").slice(0,2).toUpperCase(); }
+function _monogram(p){ const S=104, c=document.createElement("canvas"); c.width=S;c.height=S; const x=c.getContext("2d"); const g=x.createRadialGradient(S/2,S*0.38,6,S/2,S/2,S*0.72); g.addColorStop(0,"#2b2d23"); g.addColorStop(1,"#16170f"); x.fillStyle=g; x.beginPath(); x.arc(S/2,S/2,S/2,0,7); x.fill(); x.fillStyle="#C7A24C"; x.font="600 44px Georgia, 'Times New Roman', serif"; x.textAlign="center"; x.textBaseline="middle"; x.fillText(_initials(p.name), S/2, S/2+3); return c.toDataURL("image/jpeg",0.85); }
+function _ensureMonograms(people){ (people||[]).forEach(p=>{ if(!_imgCache[p.id]){ const m=_monogram(p); _imgCache[p.id]={color:m,gray:m,mono:true}; } }); }
 function _prepImages(people){
+  _ensureMonograms(people);
   const jobs=(people||[]).filter(p=>p.photo).map(p=>new Promise(res=>{
     const im=new Image(); im.crossOrigin="anonymous";
     im.onload=()=>{ try{
@@ -515,8 +519,8 @@ function _prepImages(people){
         const color=c.toDataURL("image/jpeg",0.82);
         x.filter="grayscale(1) brightness(0.94) contrast(1.03)"; x.drawImage(c,0,0); x.filter="none";
         const gray=c.toDataURL("image/jpeg",0.82);
-        _imgCache[p.id]={color,gray};
-      }catch(e){ /* canvas tainted → photo host sent no CORS header; keep the gold crest circle rather than a blank node */ }
+        _imgCache[p.id]={color,gray,mono:false};
+      }catch(e){ /* tainted → keep the monogram already cached */ }
       res();
     };
     im.onerror=()=>res();
@@ -528,6 +532,7 @@ function _applyImages(){ try{ cy.batch(()=>{ cy.nodes().forEach(n=>{ const c=_im
 
 function renderGraph(){
   const visible=PEOPLE.filter(passesFilters);
+  _ensureMonograms(visible);
   const visIds=new Set(visible.map(p=>p.id));
   const links=buildLinks().filter(l=>{const s=typeof l.source==="object"?l.source.id:l.source,tt=typeof l.target==="object"?l.target.id:l.target;return visIds.has(s)&&visIds.has(tt);});
   const els=visible.map(p=>{ const c=_imgCache[p.id]; return { data:{ id:String(p.id), label:shortLabel(p), r:nodeRadius(p)*2, col:desat((p.circle||{}).colour), partner:p.partnerId?1:0, residence:p.residence||"", cool:coolOf(p)?1:0, hasImg:c?1:0, img:c?c.gray:"", imgColor:c?c.color:"" } }; });
@@ -1262,7 +1267,7 @@ async function editHouseField(d, col, label, kind){
 
 function coolOf(x){ if(!x||!x.last_contact)return false; const days=Math.floor((Date.now()-new Date(x.last_contact))/86400000); return days>(x.cadence_days||180); }
 function _today(){ const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; }
-const CH_META={call:"📞",visit:"☕",message:"✉️",letter:"✍️",email:"✉️",gathering:"🎉",other:"•"};
+const CH_META={call:"📞",visit:"☕",message:"✉️",letter:"✍️",email:"✉️",gathering:"🎉",milestone:"✦",other:"•"};
 async function logMoment(who, channel){
   const note=prompt(`A note for this ${channel}? (optional — leave blank to just log it)`,"");
   if(note===null)return;
