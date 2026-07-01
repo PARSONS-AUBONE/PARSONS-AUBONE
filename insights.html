@@ -435,6 +435,77 @@ document.querySelectorAll(".tab").forEach(t=>{
 // ── INIT ──────────────────────────────────────────────────────────────
 document.getElementById("subtitle").textContent=`${PEOPLE.length} people · loading fresh data…`;
 document.getElementById("stamp").innerHTML=`Snapshot: <strong>${GENERATED_AT}</strong> <span id="refresh-status" style="color:var(--muted)">· fetching…</span>`;
+const _pkOpen=(p)=>{ try{showCard(p);}catch(_){}};
+const _pkRerender=(p)=>{ try{ if(currentPerson&&currentPerson.id===p.id)showCard(p); if(typeof activeTab!=='undefined'){ if(activeTab==='today')renderToday(); else if(activeTab==='journal')renderJournal(); else if(activeTab==='horizons')renderGeography(); } }catch(_){}};
+
+/* ── Cmd+K · The Summoning ─────────────────────────────────────── */
+(function(){
+  if(window.__ckInstalled)return; window.__ckInstalled=true;
+  const _pn=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  function _match(q){ const nq=_pn(q.trim()); if(!nq)return [];
+    return (window.PEOPLE||PEOPLE).map(p=>{ const name=_pn(p.name); let sc=0;
+      if(name===nq)sc=100; else if(name.startsWith(nq))sc=82; else if(name.includes(nq))sc=64;
+      else { const qt=nq.split(/\s+/).filter(t=>t.length>1), nt=name.split(/\s+/); const h=qt.filter(t=>nt.some(x=>x.startsWith(t))).length; sc=h*22; }
+      return {p,sc}; }).filter(x=>x.sc>0).sort((a,b)=>b.sc-a.sc).slice(0,8);
+  }
+  const VERBS=[ {re:/\b(llam|call|telefon|hable|rang|phoned)/, ch:"call", lab:"Call", icon:"📞"},
+    {re:/\b(visit|vi a|cafe|coffee|encuentro|cena|almuerzo|asado|lunch|dinner|saw|met)/, ch:"visit", lab:"Visit", icon:"☕"},
+    {re:/\b(mensaje|message|escrib|texted|text|whatsapp|mail|email|correo|wrote|dm)/, ch:"message", lab:"Message", icon:"✉️"},
+    {re:/\b(carta|letter|nota|note)/, ch:"letter", lab:"Note", icon:"✍️"} ];
+  const FIELDS=[ {re:/^(?:alergias?|allerg(?:y|ies))\s+(.+?):\s*(.+)$/i, col:"allergies", lab:"Allergies", icon:"⚠"},
+    {re:/^(?:valor(?:es)?|tradici[oó]n(?:es)?|values?)\s+(.+?):\s*(.+)$/i, col:"values_notes", lab:"Values", icon:"✦"},
+    {re:/^(?:vive en|residencia|residence|lives?\s+in)\s+(.+?):\s*(.+)$/i, col:"residence", lab:"Residence", icon:"📍"} ];
+  function _cmd(q){
+    for(const f of FIELDS){ const m=q.match(f.re); if(m){ const who=_match(m[1])[0]; if(who) return {kind:"field", col:f.col, lab:f.lab, icon:f.icon, p:who.p, value:m[2].trim()}; } }
+    const nq=_pn(q);
+    for(const v of VERBS){ if(v.re.test(nq)){ const who=_match(q)[0]; if(who) return {kind:"log", ch:v.ch, lab:v.lab, icon:v.icon, p:who.p, note:q.trim()}; } }
+    return null;
+  }
+  let isOpen=false, sel=0, items=[];
+  const ov=document.createElement("div"); ov.id="cmdk";
+  ov.style.cssText="position:fixed;inset:0;z-index:9000;display:none;align-items:flex-start;justify-content:center;background:rgba(6,7,5,.55);backdrop-filter:blur(6px)";
+  ov.innerHTML=`<div style="margin-top:12vh;width:min(560px,92vw);background:rgba(18,20,15,.97);border:1px solid rgba(242,236,221,.14);border-radius:16px;box-shadow:0 30px 90px rgba(0,0,0,.6);overflow:hidden">
+    <input id="ck-in" autocomplete="off" spellcheck="false" placeholder="Search a soul, or note what happened…" style="width:100%;border:0;outline:0;background:transparent;color:#F2ECDD;font-family:'EB Garamond',Georgia,serif;font-size:19px;padding:18px 20px;box-sizing:border-box">
+    <div id="ck-list" style="max-height:52vh;overflow-y:auto;border-top:1px solid rgba(242,236,221,.08)"></div>
+    <div style="padding:8px 16px;font-size:10px;color:#8b8676;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;border-top:1px solid rgba(242,236,221,.06)">↑↓ move &nbsp;·&nbsp; ↵ do it &nbsp;·&nbsp; esc close &nbsp;·&nbsp; try “called Tío Carlos” or “allergy Sofía: nuts”</div>
+  </div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector("#ck-in"), list=ov.querySelector("#ck-list");
+  function show(){ isOpen=true; ov.style.display="flex"; inp.value=""; render(""); setTimeout(()=>inp.focus(),0); }
+  function hide(){ isOpen=false; ov.style.display="none"; }
+  function render(q){
+    items=[]; const cmd=q.trim()?_cmd(q):null;
+    if(cmd) items.push(cmd);
+    _match(q).forEach(m=>{ if(!cmd || cmd.p.id!==m.p.id || cmd.kind==="field") items.push({kind:"open", p:m.p}); });
+    if(!q.trim()){ list.innerHTML=`<div style="padding:16px 20px;color:#8b8676;font-family:'EB Garamond',serif;font-size:15px">Begin typing a name… or note a moment — <em>“visited Prima Sofía”</em>, <em>“values Opa: punctuality”</em>.</div>`; items=[]; return; }
+    if(!items.length){ list.innerHTML=`<div style="padding:16px 20px;color:#8b8676;font-family:'EB Garamond',serif;font-size:15px">No soul by that name.</div>`; return; }
+    sel=0; paint();
+  }
+  function paint(){
+    list.innerHTML=items.map((it,i)=>{
+      const on=i===sel?"background:rgba(242,236,221,.09)":"";
+      const base=`class="ck-row" data-i="${i}" style="display:flex;gap:11px;align-items:center;padding:11px 18px;cursor:pointer;${on}"`;
+      if(it.kind==="open") return `<div ${base}><span style="width:26px;text-align:center">👤</span><span style="color:#E9E3D3;font-family:'EB Garamond',serif;font-size:16px">${it.p.name}</span><span style="margin-left:auto;color:#8b8676;font-size:11px;font-family:'IBM Plex Mono',monospace">open</span></div>`;
+      if(it.kind==="log") return `<div ${base}><span style="width:26px;text-align:center">${it.icon}</span><span style="color:#E9E3D3;font-family:'EB Garamond',serif;font-size:16px">Record a <strong>${it.lab}</strong> with ${it.p.name}</span><span style="margin-left:auto;color:#C8945B;font-size:11px;font-family:'IBM Plex Mono',monospace">log</span></div>`;
+      return `<div ${base}><span style="width:26px;text-align:center">${it.icon}</span><span style="color:#E9E3D3;font-family:'EB Garamond',serif;font-size:16px">Set <strong>${it.lab}</strong> for ${it.p.name} → <span style="color:#C8945B">${it.value}</span></span><span style="margin-left:auto;color:#C8945B;font-size:11px;font-family:'IBM Plex Mono',monospace">save</span></div>`;
+    }).join("");
+    list.querySelectorAll(".ck-row").forEach(r=>r.addEventListener("click",()=>{ sel=Number(r.dataset.i); exec(); }));
+    const cur=list.querySelector(`.ck-row[data-i="${sel}"]`); if(cur)cur.scrollIntoView({block:"nearest"});
+  }
+  async function exec(){
+    const it=items[sel]; if(!it)return; hide();
+    try{
+      if(it.kind==="open"){ _pkOpen(it.p); return; }
+      if(it.kind==="log"){ await sbInsert("interactions",[{contact_id:it.p.id, channel:it.ch, on_date:_today(), note:it.note||null}]); it.p.last_contact=_today(); toast(`${it.lab} with ${it.p.name} recorded ✓`); _pkRerender(it.p); return; }
+      if(it.kind==="field"){ await sbPatch("contacts","id",it.p.id,{[it.col]:it.value||null}); it.p[it.col]=it.value||null; toast(`${it.lab} saved for ${it.p.name} ✓`); _pkRerender(it.p); return; }
+    }catch(e){ toast("Couldn’t do that",true); console.warn(e); }
+  }
+  inp.addEventListener("input",()=>render(inp.value));
+  inp.addEventListener("keydown",e=>{ if(e.key==="ArrowDown"){e.preventDefault();sel=Math.min(sel+1,items.length-1);paint();} else if(e.key==="ArrowUp"){e.preventDefault();sel=Math.max(sel-1,0);paint();} else if(e.key==="Enter"){e.preventDefault();exec();} else if(e.key==="Escape"){e.preventDefault();hide();} });
+  ov.addEventListener("click",e=>{ if(e.target===ov)hide(); });
+  document.addEventListener("keydown",e=>{ if((e.metaKey||e.ctrlKey)&&(e.key==="k"||e.key==="K")){ e.preventDefault(); isOpen?hide():show(); } });
+})();
+
 TABS[activeTab]();
 
 // ── DATA: Supabase backend (replaces the old Monday auto-refresh) ─────
