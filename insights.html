@@ -80,6 +80,9 @@
   .card-drawer .back:hover{ color:var(--gold-bright); }
   .card-drawer.penumbra{ border-top:3px solid #C8945B; }
   .leaflet-container{ background:#0b0d0a !important; font-family:'EB Garamond',serif; }
+  .atlas-pin .ap-face{ width:36px;height:36px;border-radius:50%;border:1.6px solid #C7A24C;background:#20241a center/cover no-repeat;color:#C7A24C;font:600 13px Georgia,serif;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,.55);overflow:hidden;filter:grayscale(.35);transition:transform .15s; }
+  .atlas-pin:hover .ap-face{ transform:scale(1.18); filter:grayscale(0); border-color:#E3C786; }
+  .ap-cluster{ width:40px;height:40px;border-radius:50%;background:rgba(199,162,76,.92);border:2px solid #E3C786;color:#1a1a12;font-family:'Cinzel',serif;font-weight:600;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.5); }
   .leaflet-popup-content-wrapper,.leaflet-popup-tip{ background:rgba(18,20,15,.97); color:#E9E3D3; border:1px solid rgba(242,236,221,.14); box-shadow:0 12px 40px rgba(0,0,0,.5); }
   .leaflet-popup-content{ margin:10px 13px; font-size:14px; }
   .leaflet-control-zoom a{ background:rgba(18,20,15,.92)!important; color:#E9E3D3!important; border-color:rgba(242,236,221,.14)!important; }
@@ -105,6 +108,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 </head>
 <body>
 <div class="cinema" aria-hidden="true"><div class="pl on" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Dunluce_Castle_and_Beach_%2819682178030%29.jpg/1920px-Dunluce_Castle_and_Beach_%2819682178030%29.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/M%C3%BCnchen-Altstadt_Residenz_Antiquarium_254.jpg/1920px-M%C3%BCnchen-Altstadt_Residenz_Antiquarium_254.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Campeonato_Argentino_de_Polo_2010_-_5237109478_e7ed034169_o.jpg/1920px-Campeonato_Argentino_de_Polo_2010_-_5237109478_e7ed034169_o.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Flinders_St_Station_at_night.jpg/1920px-Flinders_St_Station_at_night.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/High_Cross_and_O%27Rourke%27s_Tower.jpg/1920px-High_Cross_and_O%27Rourke%27s_Tower.jpg')"></div></div>
@@ -404,9 +410,30 @@ function renderGeography(){
     </div><div class="grid">${html}</div>`;
 }
 
+function _hlMentions(note){ let out=esc(note); [...PEOPLE].sort((a,b)=>(b.name||"").length-(a.name||"").length).forEach(p=>{ if(!p.name)return; const tag=esc("@"+p.name); if(out.indexOf(tag)>=0){ out=out.split(tag).join(`<span class="row-link" data-pid="${p.id}" style="color:var(--accent);font-weight:600">@${esc(p.name)}</span>`); } }); return out; }
+function _wireComposer(){
+  const inp=document.getElementById("jc-input"), ac=document.getElementById("jc-ac"), ph=document.getElementById("jc-ph"), dateEl=document.getElementById("jc-date"), saveBtn=document.getElementById("jc-save");
+  if(!inp)return;
+  if(dateEl) dateEl.value=_today();
+  let items=[], sel=0;
+  const showPh=()=>{ ph.style.display=(inp.textContent.trim()||inp.querySelector(".mention"))?"none":"block"; };
+  const closeAc=()=>{ ac.style.display="none"; items=[]; };
+  const paint=()=>{ ac.querySelectorAll(".jc-opt").forEach((o,i)=>o.style.background=i===sel?"rgba(242,236,221,.09)":""); };
+  function curQuery(){ const s=window.getSelection(); if(!s.rangeCount)return null; const r=s.getRangeAt(0); const node=r.startContainer; if(!inp.contains(node)||node.nodeType!==3)return null; const t=node.textContent.slice(0,r.startOffset); const m=t.match(/(?:^|\s)@([\p{L}\-'’]*)$/u); if(!m)return null; return {q:m[1], node, at:r.startOffset-m[1].length-1, end:r.startOffset}; }
+  function openAc(q){ const nq=(q||"").toLowerCase(); items=PEOPLE.filter(p=>{ const n=(p.name||"").toLowerCase(); return !nq||n.includes(nq)||n.split(/\s+/).some(w=>w.startsWith(nq)); }).slice(0,8); if(!items.length){ closeAc(); return; } sel=0; ac.innerHTML=items.map((p,i)=>`<div class="jc-opt" data-i="${i}" style="padding:8px 12px;cursor:pointer;font-family:'EB Garamond',serif;font-size:15px;color:var(--soft)">${esc(p.name)}${p.household?`<span style="color:var(--muted);font-size:12px"> · ${esc(p.household)}</span>`:""}</div>`).join(""); ac.style.display="block"; paint(); ac.querySelectorAll(".jc-opt").forEach(o=>{ o.addEventListener("mousedown",e=>{ e.preventDefault(); pick(items[+o.dataset.i]); }); o.addEventListener("mouseover",()=>{ sel=+o.dataset.i; paint(); }); }); }
+  function pick(p){ if(!p)return; const q=curQuery(); if(!q){ closeAc(); return; } const s=window.getSelection(); const rng=document.createRange(); rng.setStart(q.node,q.at); rng.setEnd(q.node,q.end); rng.deleteContents(); const chip=document.createElement("span"); chip.className="mention"; chip.contentEditable="false"; chip.dataset.mid=p.id; chip.textContent="@"+p.name; chip.style.cssText="color:var(--accent);font-weight:600;background:rgba(199,162,76,.14);border-radius:5px;padding:0 4px"; rng.insertNode(chip); const sp=document.createTextNode(" "); chip.after(sp); const nr=document.createRange(); nr.setStartAfter(sp); nr.collapse(true); s.removeAllRanges(); s.addRange(nr); closeAc(); showPh(); }
+  inp.addEventListener("input",()=>{ showPh(); const q=curQuery(); q?openAc(q.q):closeAc(); });
+  inp.addEventListener("keydown",e=>{ if(ac.style.display==="block"&&items.length){ if(e.key==="ArrowDown"){e.preventDefault();sel=Math.min(sel+1,items.length-1);paint();} else if(e.key==="ArrowUp"){e.preventDefault();sel=Math.max(sel-1,0);paint();} else if(e.key==="Enter"||e.key==="Tab"){e.preventDefault();pick(items[sel]);} else if(e.key==="Escape"){e.preventDefault();closeAc();} return; } if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); submit(); } });
+  inp.addEventListener("blur",()=>setTimeout(closeAc,180));
+  async function submit(){ const note=inp.innerText.replace(/ /g," ").replace(/\s+/g," ").trim(); const pids=[...new Set([...inp.querySelectorAll(".mention")].map(c=>Number(c.dataset.mid)).filter(Boolean))]; if(!pids.length){ toast("Name at least one soul with @",true); return; } if(!note){ toast("Write the milestone first",true); return; } const on=(dateEl&&dateEl.value)||_today(); saveBtn.disabled=true; try{ await sbInsert("interactions", pids.map(id=>({contact_id:id, channel:"milestone", on_date:on, note}))); pids.forEach(id=>{ const p=PEOPLE.find(x=>x.id===id); if(p) p.last_contact=(p.last_contact&&p.last_contact>on)?p.last_contact:on; }); toast("Inscribed in the chronicle ✦"); inp.innerHTML=""; showPh(); renderJournal(); }catch(e){ toast("Couldn’t inscribe",true); console.warn(e); } finally { saveBtn.disabled=false; } }
+  saveBtn.addEventListener("click",submit);
+  showPh();
+}
+
 async function renderJournal(){
   const C=document.getElementById("content");
-  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Journal</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the living chronicle of the House, gathered through time</div></div><div id="journal-feed" class="card wide" style="font-family:'EB Garamond',serif;font-size:14px"><div style="color:var(--muted);padding:8px">Gathering the chronicle…</div></div>`;
+  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Journal</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the living chronicle of the House, gathered through time</div></div><div class="card wide" style="margin-bottom:14px"><div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:20px;color:var(--accent);margin-top:3px">✒️</span><div style="flex:1;position:relative"><div id="jc-input" contenteditable="true" style="min-height:26px;outline:none;font-family:'EB Garamond',serif;font-size:16px;line-height:1.6;color:var(--soft);border-bottom:1px solid var(--line);padding:4px 0 8px"></div><div id="jc-ph" style="position:absolute;top:4px;left:0;color:var(--muted);font-family:'EB Garamond',serif;font-size:16px;pointer-events:none">Inscribe a milestone… type <b style="color:var(--accent)">@</b> to name a soul</div><div id="jc-ac" style="display:none;position:absolute;left:0;top:40px;z-index:60;background:rgba(18,20,15,.98);border:1px solid var(--line-2,rgba(242,236,221,.14));border-radius:10px;box-shadow:0 14px 44px rgba(0,0,0,.55);max-height:230px;overflow-y:auto;min-width:240px"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><input id="jc-date" type="date" style="background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:12px;padding:5px 9px;font-family:var(--f-data)"><button id="jc-save" class="tab" style="border:1px solid var(--accent);color:var(--accent)">Inscribe ✦</button></div></div></div></div><div id="journal-feed" class="card wide" style="font-family:'EB Garamond',serif;font-size:14px"><div style="color:var(--muted);padding:8px">Gathering the chronicle…</div></div>`;
+  _wireComposer();
   const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
   try{
     const [ints,gifts]=await Promise.all([
@@ -414,7 +441,8 @@ async function renderJournal(){
       sbGet("gifts?select=id,direction,item,occasion,on_date,contact_id&order=on_date.desc,id.desc&limit=400")
     ]);
     const ev=[];
-    ints.forEach(r=>ev.push({date:r.on_date, icon:(CH_META[r.channel]||"•"), pid:r.contact_id, text:r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`}));
+    const _seenMs=new Set();
+    ints.forEach(r=>{ if(r.channel==="milestone"){ const k=(r.on_date||"")+"|"+(r.note||""); if(_seenMs.has(k))return; _seenMs.add(k); ev.push({date:r.on_date, milestone:true, note:r.note||""}); } else ev.push({date:r.on_date, icon:(CH_META[r.channel]||"•"), pid:r.contact_id, text:r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`}); });
     gifts.forEach(r=>ev.push({date:r.on_date, icon:"🎁", pid:r.contact_id, text:`${r.direction==="given"?"Gave":"Received"} ${esc(r.item)}${r.occasion?` <span style="color:var(--muted)">· ${esc(r.occasion)}</span>`:""}`}));
     ev.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
     const feed=document.getElementById("journal-feed"); if(!feed)return;
@@ -424,9 +452,10 @@ async function renderJournal(){
       const d=e.date?new Date(e.date+"T00:00:00"):null;
       const key=d?`${d.getFullYear()}-${d.getMonth()}`:"und";
       if(key!==curKey){ curKey=key; const ml=d?`${MONTHS[d.getMonth()]} ${d.getFullYear()}`:"Undated"; html+=`<div style="font-family:'Cinzel',serif;color:var(--accent);font-size:13px;letter-spacing:.06em;margin:18px 0 6px;border-bottom:1px solid var(--line);padding-bottom:5px">${ml}</div>`; }
-      const per=byId[e.pid];
+      if(e.milestone){ html+=`<div style="display:flex;gap:11px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">✦</span><div style="flex:1"><div style="color:#ecd9a6;font-style:italic;line-height:1.55">${_hlMentions(e.note)}</div><div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`; }
+      else { const per=byId[e.pid];
       const name=per?`<span class="row-link" data-pid="${per.id}" style="font-weight:600">${per.name}</span>`:`<span style="color:var(--muted)">Someone</span>`;
-      html+=`<div style="display:flex;gap:11px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">${e.icon}</span><div style="flex:1"><div style="color:var(--soft);line-height:1.5">${name} — ${e.text}</div><div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`;
+      html+=`<div style="display:flex;gap:11px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">${e.icon}</span><div style="flex:1"><div style="color:var(--soft);line-height:1.5">${name} — ${e.text}</div><div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`; }
     });
     feed.innerHTML=html;
   }catch(err){ const feed=document.getElementById("journal-feed"); if(feed)feed.innerHTML=`<div style="color:var(--muted);padding:10px">Couldn't gather the chronicle just now.</div>`; console.warn(err); }
@@ -446,10 +475,12 @@ const CITY_COORDS={
   "montevideo":[-34.90,-56.16],"santiago":[-33.45,-70.67],"sao paulo":[-23.55,-46.63],"rio de janeiro":[-22.91,-43.17],"mexico":[19.43,-99.13],"lima":[-12.05,-77.04],"bogota":[4.71,-74.07],
   "auckland":[-36.85,174.76],"tokyo":[35.68,139.69],"singapore":[1.35,103.82],"dubai":[25.20,55.27]
 };
+function _atlasInitials(name){ const parts=(name||"").replace(/\([^)]*\)/g,"").replace(/"[^"]+"/g,"").trim().split(/\s+/).filter(Boolean); if(parts.length>=2) return (parts[1][0]+parts[0][0]).toUpperCase(); return (parts[0]||"·").slice(0,2).toUpperCase(); }
+function _jit(seed,amp){ let h=0,st=String(seed); for(let k=0;k<st.length;k++)h=(h*131+st.charCodeAt(k))>>>0; return ((h%2000)/2000-0.5)*amp; }
 function renderAtlas(){
   const C=document.getElementById("content");
-  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Atlas</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the House scattered across the earth · tap a glimmer</div></div>
-    <div class="card wide" style="padding:0;overflow:hidden;border-radius:18px"><div id="atlas-map" style="height:62vh;min-height:440px;width:100%;background:#0b0d0a"></div></div>
+  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Atlas</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the House across the earth · zoom out to gather, zoom in to find each soul</div></div>
+    <div class="card wide" style="padding:0;overflow:hidden;border-radius:18px"><div id="atlas-map" style="height:64vh;min-height:460px;width:100%;background:#0b0d0a"></div></div>
     <div id="atlas-extra"></div>`;
   const host=document.getElementById("atlas-map");
   if(typeof L==="undefined"){ host.innerHTML=`<div style="padding:24px;color:var(--muted);font-family:'EB Garamond',serif">The map is still gathering itself — leave The Atlas and return in a moment.</div>`; return; }
@@ -457,22 +488,25 @@ function renderAtlas(){
   const map=L.map(host,{attributionControl:false,worldCopyJump:true,minZoom:2}).setView([25,10],2);
   _atlasMap=map;
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{subdomains:"abcd",maxZoom:19}).addTo(map);
-  const byCity={}; PEOPLE.forEach(p=>{ const c=(p.residence||"").trim(); if(!c)return; (byCity[c]=byCity[c]||[]).push(p); });
+  const layer=(typeof L.markerClusterGroup==="function") ? L.markerClusterGroup({ maxClusterRadius:46, showCoverageOnHover:false, spiderfyOnMaxZoom:true, iconCreateFunction:(cl)=>L.divIcon({html:`<div class="ap-cluster">${cl.getChildCount()}</div>`, className:"", iconSize:[40,40]}) }) : L.layerGroup();
   const bounds=[], unplaced=[];
-  Object.keys(byCity).sort().forEach(city=>{
-    const ppl=byCity[city];
+  PEOPLE.forEach(p=>{ const city=(p.residence||"").trim(); if(!city)return;
     const co=CITY_COORDS[_cnorm(city)] || CITY_COORDS[_cnorm(city.split(",")[0])];
-    if(!co){ unplaced.push(`${city} (${ppl.length})`); return; }
-    bounds.push(co);
-    const r=7+Math.min(ppl.length,14)*1.7;
-    const mk=L.circleMarker(co,{radius:r,color:"#E3C786",weight:1.4,fillColor:"#C8945B",fillOpacity:.6,className:"atlas-glow"}).addTo(map);
-    const names=ppl.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<div class="atlas-name" data-atlas-pid="${p.id}" style="cursor:pointer;padding:2px 0;color:#E9E3D3">• ${p.name}</div>`).join("");
-    mk.bindPopup(`<div style="font-family:'Cinzel',serif;color:#C8945B;font-size:14px;margin-bottom:5px">${city} · ${ppl.length}</div>${names}`,{maxHeight:240});
-    mk.on("mouseover",()=>mk.openPopup());
+    if(!co){ unplaced.push(city); return; }
+    const lat=co[0]+_jit(p.id+"a",0.09), lng=co[1]+_jit(p.id+"b",0.13);
+    bounds.push([lat,lng]);
+    const face=p.photo ? `<div class="ap-face" style="background-image:url('${p.photo}')"></div>` : `<div class="ap-face">${_atlasInitials(p.name)}</div>`;
+    const icon=L.divIcon({ className:"atlas-pin", html:face, iconSize:[36,36], iconAnchor:[18,18] });
+    const mk=L.marker([lat,lng],{icon,title:p.name});
+    mk.bindTooltip(`${p.name}${city?` · ${city}`:""}`,{direction:"top",offset:[0,-14]});
+    mk.on("click",()=>{ if(typeof showCard==="function")showCard(p); });
+    layer.addLayer(mk);
   });
-  setTimeout(()=>{ try{ map.invalidateSize(); if(bounds.length>1)map.fitBounds(bounds,{padding:[60,60],maxZoom:6}); else if(bounds.length===1)map.setView(bounds[0],4); }catch(_){ } },160);
+  map.addLayer(layer);
+  setTimeout(()=>{ try{ map.invalidateSize(); if(bounds.length>1)map.fitBounds(bounds,{padding:[60,60],maxZoom:6}); else if(bounds.length===1)map.setView(bounds[0],5); }catch(_){ } },170);
+  const uniq=[...new Set(unplaced)];
   const extra=document.getElementById("atlas-extra");
-  extra.innerHTML = unplaced.length ? `<div class="card wide" style="margin-top:12px"><h2 style="border:0">✦ Awaiting their place on the globe</h2><div style="color:var(--muted);font-size:12px;line-height:1.7">${unplaced.join(" · ")}<br><br>These cities aren't in the gazetteer yet, so no glimmer shows for them — everything else about those souls still works. Name the city and I'll set its coordinates.</div></div>` : "";
+  extra.innerHTML = uniq.length ? `<div class="card wide" style="margin-top:12px"><h2 style="border:0">✦ Awaiting their place on the globe</h2><div style="color:var(--muted);font-size:12px;line-height:1.7">${uniq.join(" · ")}<br><br>These cities aren't in the gazetteer yet — name one and I'll set its coordinates. For pinpoint home locations (and a 3-D globe), we'd geocode each address once and store it.</div></div>` : "";
 }
 document.addEventListener("click",e=>{ const a=e.target&&e.target.closest&&e.target.closest("[data-atlas-pid]"); if(a){ const p=PEOPLE.find(x=>x.id==a.dataset.atlasPid); if(p&&typeof showCard==="function")showCard(p); } });
 
@@ -700,7 +734,7 @@ async function editHouseField(p, col, label, kind){
 
 function coolOf(x){ if(!x||!x.last_contact)return false; const days=Math.floor((Date.now()-new Date(x.last_contact))/86400000); return days>(x.cadence_days||180); }
 function _today(){ const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; }
-const CH_META={call:"📞",visit:"☕",message:"✉️",letter:"✍️",email:"✉️",gathering:"🎉",other:"•"};
+const CH_META={call:"📞",visit:"☕",message:"✉️",letter:"✍️",email:"✉️",gathering:"🎉",milestone:"✦",other:"•"};
 async function logMoment(who, channel){
   const note=prompt(`A note for this ${channel}? (optional — leave blank to just log it)`,"");
   if(note===null)return;
