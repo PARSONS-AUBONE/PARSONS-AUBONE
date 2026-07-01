@@ -228,27 +228,32 @@ function desat(hex){ const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(he
   let r=parseInt(m[1],16),g=parseInt(m[2],16),b=parseInt(m[3],16); const k=0.5,tr=176,tg=150,tb=110;
   return `rgb(${Math.round(r*(1-k)+tr*k)},${Math.round(g*(1-k)+tg*k)},${Math.round(b*(1-k)+tb*k)})`; }
 const cy = cytoscape({
-  container: document.getElementById("cy"), wheelSensitivity:0.2, minZoom:0.12, maxZoom:4,
+  container: document.getElementById("cy"), wheelSensitivity:0.2, minZoom:0.12, maxZoom:4, hideEdgesOnViewport:true, textureOnViewport:true, motionBlur:false,
   style:[
     {selector:"node", style:{ "width":"data(r)","height":"data(r)","background-color":"data(col)",
-      "border-width":1.5,"border-color":"#FBF7EE","border-opacity":0.9,
+      "border-width":1.5,"border-color":"#C9B37D","border-opacity":0.85,"background-fit":"cover","background-clip":"node",
       "label":"data(label)","font-family":"Manrope, sans-serif","font-size":10,"font-weight":600,
       "color":"#C7C0AC","text-valign":"bottom","text-margin-y":5,"text-opacity":0,
-      "transition-property":"opacity, border-color, border-width, text-opacity","transition-duration":"150ms" }},
+      "transition-property":"opacity, width, height, border-color, border-width, text-opacity","transition-duration":"170ms" }},
+    {selector:"node[hasImg = 1]", style:{ "background-image":"data(img)","background-color":"#20241a" }},
     {selector:"node[partner = 1]", style:{ "border-color":"#C0A35F","border-width":2.5 }},
     {selector:"node[cool = 1]", style:{ "border-color":"#C8945B","border-width":2.5 }},
-    {selector:"node.hl", style:{ "text-opacity":1 }},
+    {selector:"node.hl", style:{ "text-opacity":1,"width":n=>(n.data("r")||18)*1.2,"height":n=>(n.data("r")||18)*1.2,"border-width":3,"border-color":"#E3C786","z-index":9998 }},
+    {selector:"node[hasImg = 1].hl", style:{ "background-image":"data(imgColor)" }},
     {selector:"node.focus", style:{ "border-color":"#E3C786","border-width":3.5,"text-opacity":1,"color":"#F2ECDD","z-index":9999 }},
-    {selector:"node.dim", style:{ "opacity":0.12 }},
+    {selector:"node[hasImg = 1].focus", style:{ "background-image":"data(imgColor)" }},
+    {selector:"node.dim", style:{ "opacity":0.05 }},
     {selector:"edge", style:{ "width":"data(lw)","line-color":"data(lcol)","opacity":0.42,"curve-style":"straight" }},
     {selector:"edge[dash = \"1\"]", style:{ "line-style":"dashed","line-dash-pattern":[5,4] }},
-    {selector:"edge.dim", style:{ "opacity":0.04 }},
+    {selector:"edge[arrow = 1]", style:{ "target-arrow-shape":"triangle","target-arrow-color":"data(lcol)","arrow-scale":0.55 }},
+    {selector:"edge.dim", style:{ "opacity":0.03 }},
     {selector:"node.geo-dim", style:{ "opacity":0.06 }},
     {selector:"edge.geo-dim", style:{ "opacity":0.02 }}
   ],
   layout:{name:"preset"}
 });
 cy.on("tap","node", e=>{ const pr=PEOPLE.find(x=>String(x.id)===e.target.id()); if(!pr)return; const pf=document.getElementById("profile"); if(currentPerson&&currentPerson.id===pr.id&&pf&&pf.classList.contains("open")){ pf.classList.remove("open"); cy.elements().removeClass("focus dim"); currentPerson=null; } else { selectPerson(pr); } });
+cy.on("tap", e=>{ if(e.target===cy){ cy.elements().removeClass("focus dim"); const pf=document.getElementById("profile"); if(pf)pf.classList.remove("open"); currentPerson=null; } });
 cy.on("mouseover","node", e=>e.target.addClass("hl"));
 cy.on("mouseout","node", e=>e.target.removeClass("hl"));
 window.addEventListener("resize", ()=>{ try{cy.resize();}catch(_){ } });
@@ -441,19 +446,45 @@ function renderHorizons(){
   el.querySelectorAll(".hz").forEach(b=>b.addEventListener("click",()=>{ applyGeo(b.dataset.res); el.querySelectorAll(".hz").forEach(x=>x.classList.toggle("active",x===b)); }));
 }
 
+const _imgCache={};
+function _prepImages(people){
+  const jobs=(people||[]).filter(p=>p.photo).map(p=>new Promise(res=>{
+    const im=new Image(); im.crossOrigin="anonymous";
+    im.onload=()=>{ try{
+        const S=104, c=document.createElement("canvas"); c.width=S; c.height=S; const x=c.getContext("2d");
+        const side=Math.min(im.width,im.height), sx=(im.width-side)/2, sy=(im.height-side)/2;
+        x.drawImage(im,sx,sy,side,side,0,0,S,S);
+        const color=c.toDataURL("image/jpeg",0.82);
+        x.filter="grayscale(1) brightness(0.94) contrast(1.03)"; x.drawImage(c,0,0); x.filter="none";
+        const gray=c.toDataURL("image/jpeg",0.82);
+        _imgCache[p.id]={color,gray};
+      }catch(e){ /* canvas tainted → photo host sent no CORS header; keep the gold crest circle rather than a blank node */ }
+      res();
+    };
+    im.onerror=()=>res();
+    im.src=p.photo;
+  }));
+  return Promise.all(jobs);
+}
+function _applyImages(){ try{ cy.batch(()=>{ cy.nodes().forEach(n=>{ const c=_imgCache[n.id()]; if(c){ n.data("img",c.gray); n.data("imgColor",c.color); n.data("hasImg",1); } }); }); }catch(_){ } }
+
 function renderGraph(){
   const visible=PEOPLE.filter(passesFilters);
   const visIds=new Set(visible.map(p=>p.id));
   const links=buildLinks().filter(l=>{const s=typeof l.source==="object"?l.source.id:l.source,tt=typeof l.target==="object"?l.target.id:l.target;return visIds.has(s)&&visIds.has(tt);});
-  const els=visible.map(p=>({ data:{ id:String(p.id), label:shortLabel(p), r:nodeRadius(p)*2, col:desat((p.circle||{}).colour), partner:p.partnerId?1:0, residence:p.residence||"", cool:coolOf(p)?1:0 } }));
+  const els=visible.map(p=>{ const c=_imgCache[p.id]; return { data:{ id:String(p.id), label:shortLabel(p), r:nodeRadius(p)*2, col:desat((p.circle||{}).colour), partner:p.partnerId?1:0, residence:p.residence||"", cool:coolOf(p)?1:0, hasImg:c?1:0, img:c?c.gray:"", imgColor:c?c.color:"" } }; });
   links.forEach((l,i)=>{ const s=String(typeof l.source==="object"?l.source.id:l.source), tt=String(typeof l.target==="object"?l.target.id:l.target);
-    els.push({ data:{ id:"x"+i, source:s, target:tt,
-      lcol:l.type==="partner"?"#C9577F":l.type==="household"?"#C0A35F":l.type==="parent"?"#9A7B3F":"#CDBF9C",
-      lw:l.type==="partner"?3:l.type==="household"?2:1.2, dash:l.type==="parent"?"1":"0" } }); });
+    els.push({ data:{ id:"x"+i, source:s, target:tt, type:l.type,
+      lcol:l.type==="partner"?"#E3C786":l.type==="household"?"#C0A35F":l.type==="parent"?"#9A7B3F":"#8E856F",
+      lw:l.type==="partner"?3.4:l.type==="household"?2:l.type==="parent"?1.7:1, dash:(l.type==="circle")?"1":"0", arrow:l.type==="parent"?1:0 } }); });
   cy.elements().remove(); cy.add(els);
   cy.layout({ name:"cose", animate:false, fit:true, padding:50, randomize:true,
-    nodeRepulsion:()=>9000, idealEdgeLength:()=>72, edgeElasticity:()=>120, gravity:0.35, numIter:1000, nodeDimensionsIncludeLabels:true }).run();
+    nodeRepulsion:()=>12000,
+    idealEdgeLength:(e)=>{ const t=e.data("type"); return t==="partner"?24:t==="household"?52:t==="parent"?78:120; },
+    edgeElasticity:(e)=>{ const t=e.data("type"); return t==="partner"?260:t==="household"?150:100; },
+    gravity:0.3, numIter:1200, nodeDimensionsIncludeLabels:true }).run();
   const st=document.getElementById("stats"); if(st) st.textContent=`${visible.length} souls · ${links.length} threads`;
+  if(!window._imgPrepDone && !window._imgPrepping){ window._imgPrepping=true; _prepImages(PEOPLE).then(()=>{ window._imgPrepDone=true; window._imgPrepping=false; _applyImages(); }).catch(()=>{ window._imgPrepping=false; }); }
   if(typeof renderHorizons==="function") renderHorizons();
   if(geoRes) applyGeo(geoRes);
 }
@@ -522,7 +553,8 @@ function selectPerson(d){
   CIRCLE_DEFS.forEach(c=>{if(d.circleIds.includes(c.id))PEOPLE.filter(p=>p.circleIds.includes(c.id)).forEach(p=>related.add(p.id));});
 
   const _pf=document.getElementById("profile"); if(_pf){ _pf.classList.add("open"); _pf.scrollTop=0; }
-  if(typeof cyFocus==="function") cyFocus(d.id, related);
+  const focusRel=new Set([d.id, ...(tree.partner?[tree.partner.id]:[]), ...tree.parents.map(p=>p.id), ...tree.children.map(p=>p.id)]);
+  if(typeof cyFocus==="function") cyFocus(d.id, focusRel);
 
   const circlePills=d.circleIds.map(cid=>{
     const c=CIRCLE_MAP[cid]||{label:cid,colour:"#666"};
