@@ -5,6 +5,8 @@
 <title>The Map · Parsons-Aubone</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape-edgehandles@4.0.1/cytoscape-edgehandles.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -46,6 +48,9 @@
   .hz:hover{ color:var(--gold-bright); }
   .hz.active{ background:rgba(242,236,221,.08); border-color:var(--hzc,var(--gold)); color:var(--gold-bright); }
   .profile.penumbra{ box-shadow:inset 0 3px 0 0 #C8945B, 0 10px 40px rgba(0,0,0,.5); }
+  .mode-toggle{ position:fixed; right:18px; bottom:74px; z-index:47; background:rgba(12,13,10,.85); backdrop-filter:blur(10px); border:1px solid var(--line); color:var(--soft); font-family:var(--f-ui); font-size:13px; font-weight:600; padding:10px 15px; border-radius:12px; cursor:pointer; box-shadow:0 8px 30px rgba(0,0,0,.5); user-select:none; white-space:nowrap; transition:.16s; }
+  .mode-toggle:hover{ border-color:var(--gold); color:var(--gold-bright); }
+  .mode-toggle.editing{ background:rgba(200,148,91,.22); border-color:#C8945B; color:#F6ECD8; }
   #cy{ position:fixed; inset:60px 0 0 0; z-index:2; background:transparent; }
   .legend{ position:fixed; bottom:18px; left:18px; z-index:20; background:var(--panel); backdrop-filter:blur(14px); padding:11px 14px; border-radius:13px; font-size:11px; border:1px solid var(--line); box-shadow:var(--shadow); }
   .legend-row{ display:flex; align-items:center; gap:9px; margin:4px 0; color:var(--muted); }
@@ -129,6 +134,8 @@
 <div id="horizons" class="horizons"></div>
 
 <div id="cy"></div>
+<div id="mode-toggle" class="mode-toggle">🖐 Explore</div>
+<div id="recenter-fab" class="mode-toggle" style="bottom:20px;padding:9px 13px;font-size:16px" title="Re-centre the family">🧭</div>
 
 <div class="legend">
   <div class="legend-row"><span class="legend-line" style="background:#C9577F;height:3px"></span>Partner</div>
@@ -227,6 +234,7 @@ let currentPerson=null, width=0, height=0, simulation=null, linkSel=null, nodeSe
 function desat(hex){ const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex||""); if(!m) return "#A9A293";
   let r=parseInt(m[1],16),g=parseInt(m[2],16),b=parseInt(m[3],16); const k=0.5,tr=176,tg=150,tb=110;
   return `rgb(${Math.round(r*(1-k)+tr*k)},${Math.round(g*(1-k)+tg*k)},${Math.round(b*(1-k)+tb*k)})`; }
+try{ if(typeof cytoscape!=="undefined" && typeof cytoscapeEdgehandles!=="undefined" && !cytoscape.__ehUsed){ cytoscape.use(cytoscapeEdgehandles); cytoscape.__ehUsed=true; } }catch(e){ console.warn("edgehandles register failed",e); }
 const cy = cytoscape({
   container: document.getElementById("cy"), wheelSensitivity:0.2, minZoom:0.12, maxZoom:4, hideEdgesOnViewport:true, textureOnViewport:true, motionBlur:false,
   style:[
@@ -246,6 +254,9 @@ const cy = cytoscape({
     {selector:"edge", style:{ "width":"data(lw)","line-color":"data(lcol)","opacity":0.42,"curve-style":"straight" }},
     {selector:"edge[dash = \"1\"]", style:{ "line-style":"dashed","line-dash-pattern":[5,4] }},
     {selector:"edge[arrow = 1]", style:{ "target-arrow-shape":"triangle","target-arrow-color":"data(lcol)","arrow-scale":0.55 }},
+    {selector:".eh-handle", style:{ "background-color":"#E3C786","width":13,"height":13,"border-width":0,"opacity":0.95 }},
+    {selector:".eh-source, .eh-target", style:{ "border-color":"#E3C786","border-width":3 }},
+    {selector:".eh-preview, .eh-ghost-edge", style:{ "line-color":"#E3C786","target-arrow-color":"#E3C786","width":3,"opacity":0.9 }},
     {selector:"edge.dim", style:{ "opacity":0.03 }},
     {selector:"node.geo-dim", style:{ "opacity":0.06 }},
     {selector:"edge.geo-dim", style:{ "opacity":0.02 }}
@@ -257,6 +268,53 @@ cy.on("tap", e=>{ if(e.target===cy){ cy.elements().removeClass("focus dim"); con
 cy.on("mouseover","node", e=>e.target.addClass("hl"));
 cy.on("mouseout","node", e=>e.target.removeClass("hl"));
 window.addEventListener("resize", ()=>{ try{cy.resize();}catch(_){ } });
+
+/* ── Module 3 · Edit mode — draw a thread to bind two souls ──────── */
+let _editMode=false, _eh=null;
+try{ if(cy.edgehandles){ _eh=cy.edgehandles({ snap:true, snapThreshold:22, snapFrequency:15, noEdgeEventsInDraw:true, disableBrowserGestures:true, canConnect:(s,t)=>!s.same(t), edgeParams:()=>({classes:"eh-temp"}) }); _eh.disableDrawMode(); } }catch(e){ console.warn("edgehandles unavailable",e); }
+function setEditMode(on){
+  _editMode=!!on;
+  const btn=document.getElementById("mode-toggle");
+  if(btn){ btn.classList.toggle("editing",_editMode); btn.innerHTML=_editMode ? "✍️ Editing — drag a face onto another" : "🖐 Explore"; }
+  try{ if(_eh){ _editMode ? _eh.enableDrawMode() : _eh.disableDrawMode(); } }catch(_){ }
+}
+cy.on("ehcomplete",(evt,src,tgt,added)=>{ try{added.remove();}catch(_){ } const a=PEOPLE.find(x=>String(x.id)===src.id()), b=PEOPLE.find(x=>String(x.id)===tgt.id()); if(a&&b&&a.id!==b.id) openConnectModal(a,b); });
+function openConnectModal(a,b){
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:460px;max-width:94vw"><div class="picker-head"><h3>How are they bound?</h3><div style="color:var(--muted);font-size:13px;margin-top:3px">${esc(a.name)} &nbsp;·&nbsp; ${esc(b.name)}</div></div>
+    <div style="display:flex;flex-direction:column;gap:8px;padding:14px 2px">
+      <button class="toggle cn" data-act="partner" style="padding:14px;font-size:15px;text-align:left">💍 &nbsp;${esc(a.name)} is the <strong>partner</strong> of ${esc(b.name)}</button>
+      <button class="toggle cn" data-act="a_child" style="padding:14px;font-size:15px;text-align:left">👶 &nbsp;${esc(a.name)} is a <strong>child</strong> of ${esc(b.name)}</button>
+      <button class="toggle cn" data-act="b_child" style="padding:14px;font-size:15px;text-align:left">👶 &nbsp;${esc(b.name)} is a <strong>child</strong> of ${esc(a.name)}</button>
+      <button class="toggle cn" data-act="circle" style="padding:14px;font-size:15px;text-align:left">⭐ &nbsp;They <strong>share a circle</strong></button>
+    </div>
+    <div class="picker-foot"><button class="toggle" id="cn-x">Cancel</button></div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov)close(); });
+  ov.querySelector("#cn-x").addEventListener("click",close);
+  ov.querySelectorAll(".cn").forEach(btn=>btn.addEventListener("click",async()=>{ const act=btn.dataset.act; close();
+    try{ if(act==="partner") await setPartner(a.id,b.id);
+      else if(act==="a_child") await addChild(b.id,a.id);
+      else if(act==="b_child") await addChild(a.id,b.id);
+      else if(act==="circle") openShareCircle(a,b);
+    }catch(e){ toast("Couldn’t save",true); console.warn(e); }
+  }));
+}
+function openShareCircle(a,b){
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  const chips=CIRCLE_DEFS.map(c=>`<button class="toggle sc" data-cid="${c.id}" style="margin:3px 5px 0 0"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c.colour};margin-right:6px;vertical-align:middle"></span>${esc(c.label)}</button>`).join("");
+  ov.innerHTML=`<div class="picker" style="width:460px;max-width:94vw"><div class="picker-head"><h3>Which circle do they share?</h3><div style="color:var(--muted);font-size:13px">${esc(a.name)} &nbsp;·&nbsp; ${esc(b.name)}</div><div style="display:flex;flex-wrap:wrap;margin:10px 0 2px">${chips||'<span style="color:var(--muted);font-size:12px">No circles yet — create one below.</span>'}</div></div>
+    <div class="picker-foot"><button class="toggle" id="sc-new">＋ New circle</button> <button class="toggle" id="sc-x">Cancel</button></div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov)close(); });
+  ov.querySelector("#sc-x").addEventListener("click",close);
+  const addBoth=async(cid)=>{ try{ await addCircleToContact(a.id,cid); await addCircleToContact(b.id,cid); toast(`${a.name} & ${b.name} now share a circle`); }catch(e){ toast("Couldn’t save",true); console.warn(e); } };
+  ov.querySelectorAll(".sc").forEach(btn=>btn.addEventListener("click",()=>{ const cid=btn.dataset.cid; close(); addBoth(cid); }));
+  ov.querySelector("#sc-new").addEventListener("click",async()=>{ const name=prompt("Name this circle (e.g. The Music Lovers):"); if(!name||!name.trim())return; close(); try{ const def=await createCircle(name.trim()); await addBoth(def.id); }catch(e){ toast("Couldn’t create",true); console.warn(e); } });
+}
+(function(){ const b=document.getElementById("mode-toggle"); if(b)b.addEventListener("click",()=>setEditMode(!_editMode)); const rc=document.getElementById("recenter-fab"); if(rc)rc.addEventListener("click",()=>{ try{cy.animate({fit:{eles:cy.elements(),padding:60}},{duration:320});}catch(_){ } }); })();
 const _pkOpen=(p)=>{ try{selectPerson(p);}catch(_){}};
 const _pkRerender=(p)=>{ try{ renderGraph(); if(currentPerson&&currentPerson.id===p.id)selectPerson(p); }catch(_){}};
 
