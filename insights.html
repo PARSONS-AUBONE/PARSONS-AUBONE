@@ -79,6 +79,12 @@
   .card-drawer .back{ position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:7px; width:100%; background:rgba(13,15,11,.6); backdrop-filter:blur(10px); border:none; border-bottom:1px solid var(--line); color:var(--soft); padding:13px 20px; font-family:var(--f-ui); font-size:13px; font-weight:600; cursor:pointer; }
   .card-drawer .back:hover{ color:var(--gold-bright); }
   .card-drawer.penumbra{ border-top:3px solid #C8945B; }
+  .leaflet-container{ background:#0b0d0a !important; font-family:'EB Garamond',serif; }
+  .leaflet-popup-content-wrapper,.leaflet-popup-tip{ background:rgba(18,20,15,.97); color:#E9E3D3; border:1px solid rgba(242,236,221,.14); box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  .leaflet-popup-content{ margin:10px 13px; font-size:14px; }
+  .leaflet-control-zoom a{ background:rgba(18,20,15,.92)!important; color:#E9E3D3!important; border-color:rgba(242,236,221,.14)!important; }
+  .atlas-glow{ animation:atlaspulse 3.2s ease-in-out infinite; }
+  @keyframes atlaspulse{ 0%,100%{ fill-opacity:.5 } 50%{ fill-opacity:.85 } }
   .card-drawer > :not(.back){ padding-left:22px; padding-right:22px; }
   .info-photo{ width:100%; aspect-ratio:4/3; border-radius:16px; background:var(--ink-2); background-size:cover; background-position:center; border:1px solid var(--line-2); margin:14px 0 14px; display:flex; align-items:center; justify-content:center; font-size:64px; color:var(--muted-2); overflow:hidden; box-shadow:var(--shadow); }
   .info-photo img{ width:100%; height:100%; object-fit:cover; }
@@ -97,6 +103,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 <div class="cinema" aria-hidden="true"><div class="pl on" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Dunluce_Castle_and_Beach_%2819682178030%29.jpg/1920px-Dunluce_Castle_and_Beach_%2819682178030%29.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/M%C3%BCnchen-Altstadt_Residenz_Antiquarium_254.jpg/1920px-M%C3%BCnchen-Altstadt_Residenz_Antiquarium_254.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Campeonato_Argentino_de_Polo_2010_-_5237109478_e7ed034169_o.jpg/1920px-Campeonato_Argentino_de_Polo_2010_-_5237109478_e7ed034169_o.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Flinders_St_Station_at_night.jpg/1920px-Flinders_St_Station_at_night.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/High_Cross_and_O%27Rourke%27s_Tower.jpg/1920px-High_Cross_and_O%27Rourke%27s_Tower.jpg')"></div></div>
@@ -114,6 +122,7 @@
       <div class="tab active" data-tab="overview">At a Glance</div>
       <div class="tab" data-tab="today">Today</div>
       <div class="tab" data-tab="journal">The Journal</div>
+      <div class="tab" data-tab="atlas">The Atlas</div>
       <div class="tab" data-tab="calendar">Birthdays</div>
       <div class="tab" data-tab="anniversaries">Anniversaries</div>
       <div class="tab" data-tab="health">The Roll</div>
@@ -423,7 +432,51 @@ async function renderJournal(){
   }catch(err){ const feed=document.getElementById("journal-feed"); if(feed)feed.innerHTML=`<div style="color:var(--muted);padding:10px">Couldn't gather the chronicle just now.</div>`; console.warn(err); }
 }
 
-const TABS={overview:renderOverview,today:renderToday,journal:renderJournal,calendar:renderCalendar,anniversaries:renderAnniversaries,health:renderHealth,circles:renderCircles,horizons:renderGeography};
+let _atlasMap=null;
+function _cnorm(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim(); }
+const CITY_COORDS={
+  "ireland":[53.35,-6.26],"dublin":[53.35,-6.26],"belfast":[54.60,-5.93],"antrim":[54.72,-6.21],
+  "munchen":[48.14,11.58],"munich":[48.14,11.58],"berlin":[52.52,13.40],"frankfurt":[50.11,8.68],"hamburg":[53.55,9.99],
+  "buenos aires":[-34.60,-58.38],"cordoba":[-31.42,-64.18],"mendoza":[-32.89,-68.84],"rosario":[-32.95,-60.66],"la plata":[-34.92,-57.95],"bariloche":[-41.13,-71.31],
+  "melbourne":[-37.81,144.96],"sydney":[-33.87,151.21],"brisbane":[-27.47,153.03],"perth":[-31.95,115.86],"adelaide":[-34.93,138.60],"canberra":[-35.28,149.13],"gold coast":[-28.02,153.40],
+  "london":[51.51,-0.13],"manchester":[53.48,-2.24],"edinburgh":[55.95,-3.19],
+  "madrid":[40.42,-3.70],"barcelona":[41.39,2.17],"lisboa":[38.72,-9.14],"lisbon":[38.72,-9.14],"porto":[41.15,-8.61],
+  "paris":[48.86,2.35],"roma":[41.90,12.50],"rome":[41.90,12.50],"milano":[45.46,9.19],"amsterdam":[52.37,4.90],"vienna":[48.21,16.37],"viena":[48.21,16.37],"zurich":[47.37,8.54],"geneva":[46.20,6.14],"bruselas":[50.85,4.35],"brussels":[50.85,4.35],
+  "new york":[40.71,-74.01],"nueva york":[40.71,-74.01],"miami":[25.76,-80.19],"los angeles":[34.05,-118.24],"chicago":[41.88,-87.63],"toronto":[43.65,-79.38],"boston":[42.36,-71.06],
+  "montevideo":[-34.90,-56.16],"santiago":[-33.45,-70.67],"sao paulo":[-23.55,-46.63],"rio de janeiro":[-22.91,-43.17],"mexico":[19.43,-99.13],"lima":[-12.05,-77.04],"bogota":[4.71,-74.07],
+  "auckland":[-36.85,174.76],"tokyo":[35.68,139.69],"singapore":[1.35,103.82],"dubai":[25.20,55.27]
+};
+function renderAtlas(){
+  const C=document.getElementById("content");
+  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Atlas</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the House scattered across the earth · tap a glimmer</div></div>
+    <div class="card wide" style="padding:0;overflow:hidden;border-radius:18px"><div id="atlas-map" style="height:62vh;min-height:440px;width:100%;background:#0b0d0a"></div></div>
+    <div id="atlas-extra"></div>`;
+  const host=document.getElementById("atlas-map");
+  if(typeof L==="undefined"){ host.innerHTML=`<div style="padding:24px;color:var(--muted);font-family:'EB Garamond',serif">The map is still gathering itself — leave The Atlas and return in a moment.</div>`; return; }
+  if(_atlasMap){ try{_atlasMap.remove();}catch(_){ } _atlasMap=null; }
+  const map=L.map(host,{attributionControl:false,worldCopyJump:true,minZoom:2}).setView([25,10],2);
+  _atlasMap=map;
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{subdomains:"abcd",maxZoom:19}).addTo(map);
+  const byCity={}; PEOPLE.forEach(p=>{ const c=(p.residence||"").trim(); if(!c)return; (byCity[c]=byCity[c]||[]).push(p); });
+  const bounds=[], unplaced=[];
+  Object.keys(byCity).sort().forEach(city=>{
+    const ppl=byCity[city];
+    const co=CITY_COORDS[_cnorm(city)] || CITY_COORDS[_cnorm(city.split(",")[0])];
+    if(!co){ unplaced.push(`${city} (${ppl.length})`); return; }
+    bounds.push(co);
+    const r=7+Math.min(ppl.length,14)*1.7;
+    const mk=L.circleMarker(co,{radius:r,color:"#E3C786",weight:1.4,fillColor:"#C8945B",fillOpacity:.6,className:"atlas-glow"}).addTo(map);
+    const names=ppl.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<div class="atlas-name" data-atlas-pid="${p.id}" style="cursor:pointer;padding:2px 0;color:#E9E3D3">• ${p.name}</div>`).join("");
+    mk.bindPopup(`<div style="font-family:'Cinzel',serif;color:#C8945B;font-size:14px;margin-bottom:5px">${city} · ${ppl.length}</div>${names}`,{maxHeight:240});
+    mk.on("mouseover",()=>mk.openPopup());
+  });
+  setTimeout(()=>{ try{ map.invalidateSize(); if(bounds.length>1)map.fitBounds(bounds,{padding:[60,60],maxZoom:6}); else if(bounds.length===1)map.setView(bounds[0],4); }catch(_){ } },160);
+  const extra=document.getElementById("atlas-extra");
+  extra.innerHTML = unplaced.length ? `<div class="card wide" style="margin-top:12px"><h2 style="border:0">✦ Awaiting their place on the globe</h2><div style="color:var(--muted);font-size:12px;line-height:1.7">${unplaced.join(" · ")}<br><br>These cities aren't in the gazetteer yet, so no glimmer shows for them — everything else about those souls still works. Name the city and I'll set its coordinates.</div></div>` : "";
+}
+document.addEventListener("click",e=>{ const a=e.target&&e.target.closest&&e.target.closest("[data-atlas-pid]"); if(a){ const p=PEOPLE.find(x=>x.id==a.dataset.atlasPid); if(p&&typeof showCard==="function")showCard(p); } });
+
+const TABS={overview:renderOverview,today:renderToday,journal:renderJournal,atlas:renderAtlas,calendar:renderCalendar,anniversaries:renderAnniversaries,health:renderHealth,circles:renderCircles,horizons:renderGeography};
 let activeTab="overview";
 document.querySelectorAll(".tab").forEach(t=>{
   t.addEventListener("click",()=>{
