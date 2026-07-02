@@ -123,6 +123,25 @@
 :root{ --soft:#E6E0D0; --muted:rgba(240,234,220,.6); }
 #journal-feed{ font-size:15.5px !important; line-height:1.62; }
 </style>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#080B11">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="The House">
+<style>
+@view-transition{navigation:auto}
+/* the Journal breathes as you scroll — a gold thread down its margin */
+#journal-feed{ position:relative; }
+#journal-feed::before{ content:""; position:absolute; left:9px; top:22px; bottom:22px; width:1px;
+  background:linear-gradient(180deg, transparent, rgba(201,162,74,.35) 12%, rgba(201,162,74,.35) 88%, transparent); }
+#journal-feed > div{ margin-left:16px; }
+@supports (animation-timeline: view()){
+  #journal-feed > div{ animation:jrise linear both; animation-timeline:view(); animation-range:entry 0% entry 55%; }
+  @keyframes jrise{ from{ opacity:.12; transform:translateY(14px) } to{ opacity:1; transform:none } }
+}
+</style>
+<script>if("serviceWorker" in navigator){addEventListener("load",()=>{navigator.serviceWorker.register("sw.js").catch(()=>{})})}</script>
 </head>
 <body>
 <div class="cinema" aria-hidden="true"><div class="pl on" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Dunluce_Castle_and_Beach_%2819682178030%29.jpg/1920px-Dunluce_Castle_and_Beach_%2819682178030%29.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/M%C3%BCnchen-Altstadt_Residenz_Antiquarium_254.jpg/1920px-M%C3%BCnchen-Altstadt_Residenz_Antiquarium_254.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Campeonato_Argentino_de_Polo_2010_-_5237109478_e7ed034169_o.jpg/1920px-Campeonato_Argentino_de_Polo_2010_-_5237109478_e7ed034169_o.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Flinders_St_Station_at_night.jpg/1920px-Flinders_St_Station_at_night.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/High_Cross_and_O%27Rourke%27s_Tower.jpg/1920px-High_Cross_and_O%27Rourke%27s_Tower.jpg')"></div></div>
@@ -376,6 +395,30 @@ const HZ_CANON=[
 const HZ_PAL=["#C9A24A","#A98FB0","#7BB0DA","#5E8B6A","#C8945B","#9AA7B3","#C97F7F","#83A18B"];
 function hzMeta(k){ const c=HZ_CANON.find(x=>x.key===k); if(c)return c; let h=0; for(let i=0;i<k.length;i++)h=(h*31+k.charCodeAt(i))>>>0; return {key:k,glyph:"📍",colour:HZ_PAL[h%HZ_PAL.length]}; }
 
+async function _fillOnThisDay(){
+  const el=document.getElementById("otd"); if(!el)return;
+  try{
+    const md=`${String(TODAY.getMonth()+1).padStart(2,"0")}-${String(TODAY.getDate()).padStart(2,"0")}`;
+    const yr=TODAY.getFullYear();
+    const [ints,gifts]=await Promise.all([
+      sbGet("interactions?select=*&order=on_date.desc&limit=1200").catch(()=>[]),
+      sbGet("gifts?select=*&order=on_date.desc&limit=600").catch(()=>[]) ]);
+    const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
+    const seen=new Set(); const hits=[];
+    (ints||[]).forEach(r=>{ if(!r.on_date)return; const a=r.on_date.split("-"); if(`${a[1]}-${a[2]}`!==md||Number(a[0])>=yr)return;
+      const k=r.on_date+"|"+(r.note||r.channel); if(seen.has(k))return; seen.add(k);
+      hits.push({y:yr-Number(a[0]), icon:(CH_META[r.channel]||"•"), pid:r.contact_id, text:r.note?_hlMentions(r.note):String(r.channel||""), photo:r.photo_url||null}); });
+    (gifts||[]).forEach(r=>{ if(!r.on_date)return; const a=r.on_date.split("-"); if(`${a[1]}-${a[2]}`!==md||Number(a[0])>=yr)return;
+      hits.push({y:yr-Number(a[0]), icon:"🎁", pid:r.contact_id, text:esc(r.item||"")}); });
+    if(!hits.length){ el.style.display="none"; return; }
+    hits.sort((x,z)=>x.y-z.y);
+    el.style.display="";
+    el.innerHTML=`<h2 style="border:0">🕰 On this day</h2>`+hits.slice(0,5).map(h=>{ const per=byId[h.pid];
+      const who=per?`<span class="row-link" data-pid="${per.id}" style="font-weight:600">${per.name}</span> — `:(h.pid?"":`<span style="color:#C8945B">🕯 The House · </span>`);
+      const ph=h.photo?`<img src="${h.photo}" loading="lazy" style="display:block;max-width:100%;max-height:180px;border-radius:10px;margin-top:6px;border:1px solid rgba(242,236,221,.12)">`:"";
+      return `<div style="display:flex;gap:11px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">${h.icon}</span><div style="flex:1"><div style="font-family:'EB Garamond',serif;font-size:15px;color:var(--soft)">${who}${h.text}</div>${ph}<div style="font-family:var(--f-data);font-size:10px;color:#C8945B;letter-spacing:.08em;margin-top:2px">${h.y===1?"A YEAR AGO TODAY":h.y+" YEARS AGO TODAY"}</div></div></div>`; }).join("");
+  }catch(_){ el.style.display="none"; }
+}
 function renderToday(){
   const C=document.getElementById("content");
   const occ=s=>{const a=s.split("-"),mm=a[1],dd=a[2];const x=new Date(`${TODAY.getFullYear()}-${mm}-${dd}`),y=new Date(`${TODAY.getFullYear()+1}-${mm}-${dd}`);const n=x>=TODAY?x:y;return{n,days:Math.ceil((n-TODAY)/86400000)};};
@@ -402,9 +445,11 @@ function renderToday(){
       <div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">those whose days draw near, and those grown quiet.</div>
     </div>
     ${rollHTML}
+    <div class="card wide" id="otd" style="display:none"></div>
     <div class="card"><h2 style="border:0">🕯 Days drawing near</h2>${events.length?events.map(evRow).join(""):`<div class="empty">No birthdays or anniversaries within the next three weeks.</div>`}</div>
     <div class="card"><h2 style="border:0">🌒 Kinships in penumbra</h2>${penumbra.length?penumbra.map(penRow).join(""):`<div class="empty">No correspondence has fallen quiet — or none is recorded yet.<br><br>As you note letters, calls and visits, the House will gently raise the bonds grown distant.</div>`}</div>
   </div>`;
+  _fillOnThisDay();
 }
 
 function renderGeography(){
@@ -965,7 +1010,9 @@ let activeTab="overview";
 document.querySelectorAll(".tab").forEach(t=>{
   t.addEventListener("click",()=>{
     document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
-    t.classList.add("active"); activeTab=t.dataset.tab; TABS[activeTab]();
+    t.classList.add("active"); activeTab=t.dataset.tab;
+    const _run=()=>TABS[activeTab]();
+    (document.startViewTransition?document.startViewTransition(_run):_run());
   });
 });
 
