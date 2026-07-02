@@ -131,6 +131,7 @@
   <div class="brand">The Map</div>
   <input type="search" id="search" placeholder="Search the household…">
   <button id="filters-btn" class="tbtn">Filters</button>
+  <button id="lineage-btn" class="tbtn">🌳 Lineage</button>
   <button id="refresh-btn" class="tbtn">Refresh</button>
   <div class="count-hud" id="stats"></div>
 </header>
@@ -143,7 +144,7 @@
 
 <div class="legend">
   <div class="legend-row"><span class="legend-line" style="background:#E3C786;height:3px"></span>Marriage · partners</div>
-  <div class="legend-row"><span class="legend-line" style="background:#9A7B3F;height:2px"></span>Blood — parent → child</div>
+  <div class="legend-row"><span class="legend-line" style="background:#9A7B3F;height:2px"></span>Bloodline · arrow to the parent</div>
   <div class="legend-row"><span class="legend-line" style="background:#C0A35F;height:2px"></span>Same household</div>
   <div class="legend-row"><span class="legend-line" style="background:transparent;height:0;border-top:1.5px dashed #8E856F"></span>Shared circle</div>
   <div class="legend-row"><span style="width:10px;height:10px;border-radius:50%;border:2px solid #C9B37D;display:inline-block;flex-shrink:0"></span>At peace</div>
@@ -256,6 +257,7 @@ const cy = cytoscape({
     {selector:"node[hasImg = 1].hl", style:{ "background-image":"data(imgColor)" }},
     {selector:"node.focus", style:{ "border-color":"#E3C786","border-width":3.5,"text-opacity":1,"color":"#F2ECDD","z-index":9999 }},
     {selector:"node[hasImg = 1].focus", style:{ "background-image":"data(imgColor)" }},
+    {selector:"node.lin", style:{ "text-opacity":1 }},
     {selector:"node.dim", style:{ "opacity":0.05 }},
     {selector:"edge", style:{ "width":"data(lw)","line-color":"data(lcol)","opacity":0.42,"curve-style":"straight" }},
     {selector:"edge[dash = \"1\"]", style:{ "line-style":"dashed","line-dash-pattern":[5,4] }},
@@ -528,7 +530,8 @@ function openShareCircle(a,b){
   ov.querySelectorAll(".sc").forEach(btn=>btn.addEventListener("click",()=>{ const cid=btn.dataset.cid; close(); addBoth(cid); }));
   ov.querySelector("#sc-new").addEventListener("click",async()=>{ const name=prompt("Name this circle (e.g. The Music Lovers):"); if(!name||!name.trim())return; close(); try{ const def=await createCircle(name.trim()); await addBoth(def.id); }catch(e){ toast("Couldn’t create",true); console.warn(e); } });
 }
-(function(){ const b=document.getElementById("mode-toggle"); if(b)b.addEventListener("click",()=>setEditMode(!_editMode)); const rc=document.getElementById("recenter-fab"); if(rc)rc.addEventListener("click",()=>{ try{cy.animate({fit:{eles:cy.elements(),padding:60}},{duration:320});}catch(_){ } }); })();
+(function(){ const b=document.getElementById("mode-toggle"); if(b)b.addEventListener("click",()=>setEditMode(!_editMode)); const rc=document.getElementById("recenter-fab"); if(rc)rc.addEventListener("click",()=>{ try{cy.animate({fit:{eles:cy.elements(),padding:60}},{duration:320});}catch(_){ } });
+  const lb=document.getElementById("lineage-btn"); if(lb)lb.addEventListener("click",()=>{ _lineage=!_lineage; lb.textContent=_lineage?"✦ Constellation":"🌳 Lineage"; lb.style.borderColor=_lineage?"var(--gold)":""; lb.style.color=_lineage?"var(--gold-bright)":""; renderGraph(); toast(_lineage?"The Lineage — blood & marriage, elders above":"The Constellation"); }); })();
 const _pkOpen=(p)=>{ try{selectPerson(p);}catch(_){}};
 const _pkRerender=(p)=>{ try{ renderGraph(); if(currentPerson&&currentPerson.id===p.id)selectPerson(p); }catch(_){}};
 
@@ -719,6 +722,37 @@ function renderHorizons(){
   el.querySelectorAll(".hz").forEach(b=>b.addEventListener("click",()=>{ applyGeo(b.dataset.res); el.querySelectorAll(".hz").forEach(x=>x.classList.toggle("active",x===b)); }));
 }
 
+let _lineage=false;
+function _lineageLayout(people, links){
+  const byId=Object.fromEntries(people.map(p=>[p.id,p]));
+  const rank={};
+  function getRank(p, stack){ if(rank[p.id]!=null)return rank[p.id]; if(stack.has(p.id))return 0; stack.add(p.id);
+    const ps=(p.parentIds||[]).map(id=>byId[id]).filter(Boolean);
+    const r=ps.length? Math.max.apply(null,ps.map(x=>getRank(x,stack)))+1 : 0;
+    rank[p.id]=r; stack.delete(p.id); return r; }
+  people.forEach(p=>getRank(p,new Set()));
+  for(let k=0;k<3;k++){
+    people.forEach(p=>{ const q=p.partnerId&&byId[p.partnerId]; if(q&&rank[q.id]!=null){ const m=Math.max(rank[p.id],rank[q.id]); rank[p.id]=m; rank[q.id]=m; } });
+    people.forEach(p=>{ const ps=(p.parentIds||[]).map(id=>byId[id]).filter(Boolean); if(ps.length){ const m=Math.max.apply(null,ps.map(x=>rank[x.id]))+1; if(m>rank[p.id])rank[p.id]=m; } });
+  }
+  const rows={}; people.forEach(p=>{ (rows[rank[p.id]]=rows[rank[p.id]]||[]).push(p); });
+  const ranks=Object.keys(rows).map(Number).sort((a,b)=>a-b);
+  const xpos={};
+  function glue(row,r){ const placed=[],seen=new Set();
+    row.forEach(p=>{ if(seen.has(p.id))return; placed.push(p); seen.add(p.id); const q=p.partnerId&&byId[p.partnerId]; if(q&&rank[q.id]===r&&!seen.has(q.id)){ placed.push(q); seen.add(q.id); } });
+    return placed; }
+  ranks.forEach(r=>{ rows[r].sort((a,b)=>(a.name||"").localeCompare(b.name||"")); rows[r]=glue(rows[r],r); rows[r].forEach((p,i)=>xpos[p.id]=i); });
+  function avgParentX(p){ const ps=(p.parentIds||[]).map(id=>byId[id]).filter(Boolean); if(!ps.length)return xpos[p.id]||0; return ps.reduce((t,x)=>t+(xpos[x.id]||0),0)/ps.length; }
+  for(let k=0;k<3;k++){
+    ranks.forEach(r=>{ if(r===0)return;
+      rows[r].sort((a,b)=>avgParentX(a)-avgParentX(b));
+      rows[r]=glue(rows[r],r); rows[r].forEach((p,i)=>xpos[p.id]=i); });
+  }
+  const XS=130, YS=185, pos={};
+  ranks.forEach(r=>{ const row=rows[r]; const w=(row.length-1)*XS; row.forEach((p,i)=>{ pos[String(p.id)]={x:i*XS-w/2, y:r*YS}; }); });
+  return pos;
+}
+
 const _imgCache={};
 function _initials(name){ const parts=(name||"").replace(/\([^)]*\)/g,"").replace(/"[^"]+"/g,"").trim().split(/\s+/).filter(Boolean); if(parts.length>=2) return (parts[1][0]+parts[0][0]).toUpperCase(); return (parts[0]||"\u00b7").slice(0,2).toUpperCase(); }
 function _monogram(p){ const S=104, c=document.createElement("canvas"); c.width=S;c.height=S; const x=c.getContext("2d"); const g=x.createRadialGradient(S/2,S*0.38,6,S/2,S/2,S*0.72); g.addColorStop(0,"#2b2d23"); g.addColorStop(1,"#16170f"); x.fillStyle=g; x.beginPath(); x.arc(S/2,S/2,S/2,0,7); x.fill(); x.fillStyle="#C7A24C"; x.font="600 44px Georgia, 'Times New Roman', serif"; x.textAlign="center"; x.textBaseline="middle"; x.fillText(_initials(p.name), S/2, S/2+3); return c.toDataURL("image/jpeg",0.85); }
@@ -750,18 +784,26 @@ function renderGraph(){
   _ensureMonograms(visible);
   const visIds=new Set(visible.map(p=>p.id));
   const links=buildLinks().filter(l=>{const s=typeof l.source==="object"?l.source.id:l.source,tt=typeof l.target==="object"?l.target.id:l.target;return visIds.has(s)&&visIds.has(tt);});
+  const links2=_lineage?links.filter(l=>l.type==="partner"||l.type==="parent"):links;
   const els=visible.map(p=>{ const c=_imgCache[p.id]; return { data:{ id:String(p.id), label:shortLabel(p), r:nodeRadius(p)*2, col:desat((p.circle||{}).colour), partner:p.partnerId?1:0, residence:p.residence||"", cool:coolOf(p)?1:0, hasImg:c?1:0, img:c?c.gray:"", imgColor:c?c.color:"" } }; });
-  links.forEach((l,i)=>{ const s=String(typeof l.source==="object"?l.source.id:l.source), tt=String(typeof l.target==="object"?l.target.id:l.target);
+  links2.forEach((l,i)=>{ const s=String(typeof l.source==="object"?l.source.id:l.source), tt=String(typeof l.target==="object"?l.target.id:l.target);
     els.push({ data:{ id:"x"+i, source:s, target:tt, type:l.type,
       lcol:l.type==="partner"?"#E3C786":l.type==="household"?"#C0A35F":l.type==="parent"?"#9A7B3F":"#8E856F",
       lw:l.type==="partner"?3.4:l.type==="household"?2:l.type==="parent"?1.7:1, dash:(l.type==="circle")?"1":"0", arrow:l.type==="parent"?1:0 } }); });
   cy.elements().remove(); cy.add(els);
-  cy.layout({ name:"cose", animate:false, fit:true, padding:50, randomize:true,
-    nodeRepulsion:()=>12000,
-    idealEdgeLength:(e)=>{ const t=e.data("type"); return t==="partner"?24:t==="household"?52:t==="parent"?78:120; },
-    edgeElasticity:(e)=>{ const t=e.data("type"); return t==="partner"?260:t==="household"?150:100; },
-    gravity:0.3, numIter:1200, nodeDimensionsIncludeLabels:true }).run();
-  const st=document.getElementById("stats"); if(st) st.textContent=`${visible.length} souls · ${links.length} threads`;
+  if(_lineage){
+    const _pos=_lineageLayout(visible, links2);
+    cy.nodes().addClass("lin");
+    cy.layout({ name:"preset", positions:n=>_pos[n.id()]||{x:0,y:0}, fit:true, padding:70 }).run();
+  } else {
+    cy.nodes().removeClass("lin");
+    cy.layout({ name:"cose", animate:false, fit:true, padding:50, randomize:true,
+      nodeRepulsion:()=>12000,
+      idealEdgeLength:(e)=>{ const t=e.data("type"); return t==="partner"?24:t==="household"?52:t==="parent"?78:120; },
+      edgeElasticity:(e)=>{ const t=e.data("type"); return t==="partner"?260:t==="household"?150:100; },
+      gravity:0.3, numIter:1200, nodeDimensionsIncludeLabels:true }).run();
+  }
+  const st=document.getElementById("stats"); if(st) st.textContent=`${visible.length} souls · ${links2.length} threads${_lineage?" · the Lineage":""}`;
   if(!window._imgPrepDone && !window._imgPrepping){ window._imgPrepping=true; _prepImages(PEOPLE).then(()=>{ window._imgPrepDone=true; window._imgPrepping=false; _applyImages(); }).catch(()=>{ window._imgPrepping=false; }); }
   if(typeof renderHorizons==="function") renderHorizons();
   if(geoRes) applyGeo(geoRes);
@@ -1346,9 +1388,13 @@ function openContactPicker({title, excludeIds=[], onPick}){
   document.body.appendChild(ov);
   const list=ov.querySelector("#pk-list"), search=ov.querySelector("#pk-search");
   function draw(q){
+    const qt=(q||"").trim();
     const f=q?pool.filter(p=>(p.name+" "+(p.nickname||"")).toLowerCase().includes(q.toLowerCase())):pool;
-    list.innerHTML=f.slice(0,80).map(p=>`<div class="picker-item" data-id="${p.id}"><span class="pi-dot" style="background:${p.circle.colour}"></span><span>${p.name}</span><span class="pi-sub">${p.household||p.role||""}</span></div>`).join("")||`<div style="padding:14px;color:var(--muted)">No matches.</div>`;
-    list.querySelectorAll(".picker-item").forEach(it=>it.addEventListener("click",async()=>{ ov.remove(); await onPick(Number(it.dataset.id)); }));
+    const rows=f.slice(0,80).map(p=>`<div class="picker-item" data-id="${p.id}"><span class="pi-dot" style="background:${p.circle.colour}"></span><span>${p.name}</span><span class="pi-sub">${p.household||p.role||""}</span></div>`).join("");
+    const newRow=qt.length>1?`<div class="picker-item" id="pk-new" style="border-top:1px solid rgba(199,162,76,.3)"><span class="pi-dot" style="background:#C7A24C"></span><span>＋ Add “<strong>${esc(qt)}</strong>” to the House</span></div>`:"";
+    list.innerHTML=(rows||(newRow?"":`<div style="padding:14px;color:var(--muted)">No matches.</div>`))+newRow;
+    list.querySelectorAll(".picker-item[data-id]").forEach(it=>it.addEventListener("click",async()=>{ ov.remove(); await onPick(Number(it.dataset.id)); }));
+    const nb=list.querySelector("#pk-new"); if(nb)nb.addEventListener("click",async()=>{ ov.remove(); try{ const np=await createSoul(qt); await onPick(np.id); }catch(e){ toast("Couldn’t add them",true); console.warn(e); } });
   }
   search.addEventListener("input",()=>draw(search.value));
   ov.querySelector("#pk-close").addEventListener("click",()=>ov.remove());
