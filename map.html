@@ -136,6 +136,7 @@
   <button id="filters-btn" class="tbtn">Filters</button>
   <button id="lineage-btn" class="tbtn">🌳 Lineage</button>
   <button id="btn3d" class="tbtn" title="The constellation in three dimensions">✧ 3D</button>
+  <button id="proc-btn" class="tbtn" title="The House passes in review — an automatic tour, soul by soul">▶ Procession</button>
   <button id="refresh-btn" class="tbtn">Refresh</button>
   <div class="count-hud" id="stats"></div>
 </header>
@@ -279,7 +280,7 @@ const cy = cytoscape({
   layout:{name:"preset"}
 });
 cy.on("tap","node", e=>{ const pr=PEOPLE.find(x=>String(x.id)===e.target.id()); if(!pr)return; const pf=document.getElementById("profile"); if(currentPerson&&currentPerson.id===pr.id&&pf&&pf.classList.contains("open")){ pf.classList.remove("open"); cy.elements().removeClass("focus dim"); currentPerson=null; } else { selectPerson(pr); } });
-cy.on("tap", e=>{ if(e.target===cy){ cy.elements().removeClass("focus dim"); const pf=document.getElementById("profile"); if(pf)pf.classList.remove("open"); currentPerson=null; if(typeof _egoClear==="function")_egoClear(); } });
+cy.on("tap", e=>{ if(e.target===cy){ cy.elements().removeClass("focus dim"); const pf=document.getElementById("profile"); if(pf)pf.classList.remove("open"); currentPerson=null; if(typeof _egoClear==="function")_egoClear(); _bondLit=null; } });
 cy.on("mouseover","node", e=>e.target.addClass("hl"));
 cy.on("mouseout","node", e=>e.target.removeClass("hl"));
 window.addEventListener("resize", ()=>{ try{cy.resize();}catch(_){ } });
@@ -667,7 +668,7 @@ function buildLinks() {
   if(state.showHousehold){
     Object.values(byHousehold).forEach(members=>{
       for(let i=0;i<members.length-1;i++)
-        links.push({source:members[i].id,target:members[i+1].id,type:"household",colour:"#fdab3d",width:2,strength:0.7});
+        links.push({source:members[i].id,target:members[i+1].id,type:"household",colour:"#fdab3d",width:2,strength:0.7,hid:members[0].householdId,hh:members[0].household});
     });
   }
   if(state.showParent){
@@ -681,7 +682,7 @@ function buildLinks() {
     CIRCLE_DEFS.forEach(c=>{
       const m=PEOPLE.filter(p=>p.circleIds.includes(c.id));
       for(let i=0;i<m.length-1;i++)
-        links.push({source:m[i].id,target:m[i+1].id,type:"circle",colour:c.colour,width:1,strength:0.12});
+        links.push({source:m[i].id,target:m[i+1].id,type:"circle",colour:c.colour,width:1,strength:0.12,cid:c.id,clabel:c.label});
     });
   }
   return links;
@@ -762,6 +763,56 @@ function toggle3D(force){
   toast("The constellation in three dimensions — drag to orbit, pinch to travel");
 }
 (function(){ const b=document.getElementById("btn3d"); if(b)b.addEventListener("click",()=>toggle3D()); })();
+
+/* ── Threads that speak: tap a bond to know it; double-tap to light its kind ── */
+let _bondLit=null,_edgeTapT=null,_edgeTapId=null;
+function _edgeInfo(e){ const d=e.data(); const s=PEOPLE.find(p=>String(p.id)===e.source().id()), t=PEOPLE.find(p=>String(p.id)===e.target().id());
+  const a=s?shortLabel(s):"—", b=t?shortLabel(t):"—";
+  if(d.type==="partner")return "💍 Marriage · "+a+" & "+b;
+  if(d.type==="parent")return "Bloodline · "+a+", child of "+b;
+  if(d.type==="household")return "🏠 Same household"+(d.hh?" · "+d.hh:"")+" · "+a+" & "+b;
+  if(d.type==="circle")return "⭐ Shared circle"+(d.clabel?" · “"+d.clabel+"”":"")+" · "+a+" & "+b;
+  return a+" — "+b; }
+function _bondMatch(e,g){ const d=e.data(); if(d.type!==g.type)return false;
+  if(g.type==="circle")return String(d.cid)===String(g.cid);
+  if(g.type==="household")return String(d.hid)===String(g.hid);
+  return true; }
+function _bondLight(e){ const d=e.data(); const g={type:d.type,cid:d.cid,hid:d.hid};
+  if(_bondLit&&_bondLit.type===g.type&&String(_bondLit.cid)===String(g.cid)&&String(_bondLit.hid)===String(g.hid)){
+    cy.elements().removeClass("dim focus"); _bondLit=null; toast("The constellation entire"); return; }
+  _bondLit=g; const keep=new Set();
+  cy.batch(()=>{ cy.elements().addClass("dim");
+    cy.edges().forEach(ed=>{ if(_bondMatch(ed,g)){ ed.removeClass("dim"); keep.add(ed.source().id()); keep.add(ed.target().id()); } });
+    cy.nodes().forEach(n=>{ if(keep.has(n.id()))n.removeClass("dim"); }); });
+  const names={partner:"every marriage",parent:"every bloodline",household:(d.hh?("the household of "+d.hh):"every household"),circle:(d.clabel?("the circle “"+d.clabel+"”"):"the shared circles")};
+  toast("Lighting "+(names[g.type]||g.type)+" — double-tap again to release"); }
+cy.on("tap","edge",e=>{ const ed=e.target;
+  if(_edgeTapId===ed.id()&&_edgeTapT){ clearTimeout(_edgeTapT); _edgeTapT=null; _edgeTapId=null; _bondLight(ed); return; }
+  _edgeTapId=ed.id(); clearTimeout(_edgeTapT);
+  _edgeTapT=setTimeout(()=>{ _edgeTapT=null; _edgeTapId=null; toast(_edgeInfo(ed)); },340); });
+
+/* ── The Procession: the House passes in review ─────────────────── */
+let _proc=false,_procT=null,_procIdx=0;
+(function(){ const cap=document.createElement("div"); cap.id="proc-cap";
+  cap.style.cssText="position:fixed;left:50%;top:76px;transform:translateX(-50%);z-index:46;display:none;text-align:center;background:rgba(12,13,10,.82);backdrop-filter:blur(10px);border:1px solid rgba(201,162,74,.4);border-radius:14px;padding:10px 22px;box-shadow:0 10px 36px rgba(0,0,0,.5);max-width:80vw";
+  cap.innerHTML='<div id="pc-n" style="font-family:Cinzel,serif;font-size:16px;letter-spacing:.08em;color:#EDE6D6"></div><div id="pc-m" style="font-family:\'EB Garamond\',serif;font-style:italic;font-size:12.5px;color:rgba(237,230,214,.65);margin-top:2px"></div>';
+  document.body.appendChild(cap); })();
+function _procShow(p){ const cap=document.getElementById("proc-cap"); if(!cap)return; if(!p){ cap.style.display="none"; return; }
+  document.getElementById("pc-n").textContent=p.name;
+  const bits=[p.role,p.residence,p.last_contact?("last heard "+fmtDate(p.last_contact)):null].filter(Boolean);
+  document.getElementById("pc-m").textContent=bits.join(" · ")||"of the House"; cap.style.display="block"; }
+function _procStep(){ if(!_proc)return;
+  const list=PEOPLE.filter(passesFilters).slice().sort((a,b)=>(((a.closeness&&a.closeness.tier)||150)-((b.closeness&&b.closeness.tier)||150))||a.name.localeCompare(b.name));
+  if(!list.length)return; const p=list[_procIdx%list.length]; _procIdx++;
+  if(_3d&&_fg){ try{ const n=_fg.graphData().nodes.find(x=>x.id===String(p.id)); if(n){ const h=Math.max(1,Math.hypot(n.x||1,n.y||1,n.z||1)), r=1+85/h; _fg.cameraPosition({x:(n.x||0)*r,y:(n.y||0)*r,z:(n.z||0)*r},{x:n.x||0,y:n.y||0,z:n.z||0},2200); } }catch(_){ } }
+  else{ try{ const n=cy.getElementById(String(p.id)); if(n&&n.length){ cy.elements().removeClass("focus"); n.addClass("focus"); cy.animate({center:{eles:n},zoom:1.4},{duration:1600,easing:"ease-in-out-cubic"}); } }catch(_){ } }
+  _procShow(p); }
+function toggleProcession(force){ const on=(force!=null)?force:!_proc; _proc=on;
+  const b=document.getElementById("proc-btn"); if(b){ b.style.borderColor=on?"var(--gold)":""; b.style.color=on?"var(--gold-bright)":""; b.textContent=on?"■ Procession":"▶ Procession"; }
+  if(on){ _procIdx=0; toast("The Procession — every soul in turn · touch the map to halt"); _procStep(); _procT=setInterval(_procStep,8000); }
+  else{ if(_procT)clearInterval(_procT); _procT=null; _procShow(null); try{ cy.elements().removeClass("focus"); }catch(_){ } } }
+(function(){ const b=document.getElementById("proc-btn"); if(b)b.addEventListener("click",()=>toggleProcession());
+  ["pointerdown","wheel","touchstart"].forEach(ev=>["cy","cy3d"].forEach(id=>{ const el=document.getElementById(id); if(el)el.addEventListener(ev,()=>{ if(_proc)toggleProcession(false); },{passive:true}); })); })();
 
 /* ── The Radiance: expanding circles of nearness around a soul ────── */
 function _bondKey(a,b){ return a<b? a+"|"+b : b+"|"+a; }
@@ -949,7 +1000,7 @@ function renderGraph(){
   const _lm=_lineage?_lineageMembers(visible):null;
   const els=visible.map(p=>{ const c=_imgCache[p.id]; return { data:{ id:String(p.id), label:shortLabel(p), r:nodeRadius(p)*2, col:desat((p.circle||{}).colour), partner:p.partnerId?1:0, residence:p.residence||"", cool:coolOf(p)?1:0, unwoven:(_lm&&!_lm.has(p.id))?1:0, hasImg:c?1:0, img:c?c.gray:"", imgColor:c?c.color:"" } }; });
   links2.forEach((l,i)=>{ const s=String(typeof l.source==="object"?l.source.id:l.source), tt=String(typeof l.target==="object"?l.target.id:l.target);
-    els.push({ data:{ id:"x"+i, source:s, target:tt, type:l.type,
+    els.push({ data:{ id:"x"+i, source:s, target:tt, type:l.type, cid:l.cid||"", clabel:l.clabel||"", hid:l.hid||"", hh:l.hh||"",
       lcol:l.type==="partner"?"#E3C786":l.type==="household"?"#C0A35F":l.type==="parent"?"#9A7B3F":"#8E856F",
       lw:l.type==="partner"?3.4:l.type==="household"?2:l.type==="parent"?1.7:1, dash:(l.type==="circle")?"1":"0", arrow:l.type==="parent"?1:0 } }); });
   cy.elements().remove(); cy.add(els);
