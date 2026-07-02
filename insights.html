@@ -83,6 +83,11 @@
   .atlas-pin .ap-face{ width:36px;height:36px;border-radius:50%;border:1.6px solid #C7A24C;background:#20241a center/cover no-repeat;color:#C7A24C;font:600 13px Georgia,serif;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,.55);overflow:hidden;filter:grayscale(.35);transition:transform .15s; }
   .atlas-pin:hover .ap-face{ transform:scale(1.18); filter:grayscale(0); border-color:#E3C786; }
   .ap-cluster{ width:40px;height:40px;border-radius:50%;background:rgba(199,162,76,.92);border:2px solid #E3C786;color:#1a1a12;font-family:'Cinzel',serif;font-weight:600;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.5); }
+  .maplibregl-popup-content{ background:rgba(18,20,15,.97)!important; color:#E9E3D3; border:1px solid rgba(242,236,221,.14); border-radius:10px; font-family:'EB Garamond',serif; box-shadow:0 12px 40px rgba(0,0,0,.5); padding:10px 13px; }
+  .maplibregl-popup-tip{ border-top-color:rgba(18,20,15,.97)!important; border-bottom-color:rgba(18,20,15,.97)!important; }
+  .maplibregl-ctrl-group{ background:rgba(18,20,15,.92)!important; border:1px solid rgba(242,236,221,.14); }
+  .maplibregl-ctrl button span{ filter:invert(.85) sepia(.3); }
+  .maplibregl-canvas{ outline:none; }
   .leaflet-popup-content-wrapper,.leaflet-popup-tip{ background:rgba(18,20,15,.97); color:#E9E3D3; border:1px solid rgba(242,236,221,.14); box-shadow:0 12px 40px rgba(0,0,0,.5); }
   .leaflet-popup-content{ margin:10px 13px; font-size:14px; }
   .leaflet-control-zoom a{ background:rgba(18,20,15,.92)!important; color:#E9E3D3!important; border-color:rgba(242,236,221,.14)!important; }
@@ -111,6 +116,8 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css"/>
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 <style>
 /* Refinement pass — contrast & rhythm (Clay/Mesh research 2026-07) */
 :root{ --soft:#E6E0D0; --muted:rgba(240,234,220,.6); }
@@ -744,36 +751,105 @@ const CITY_COORDS={
 };
 function _atlasInitials(name){ const parts=(name||"").replace(/\([^)]*\)/g,"").replace(/"[^"]+"/g,"").trim().split(/\s+/).filter(Boolean); if(parts.length>=2) return (parts[1][0]+parts[0][0]).toUpperCase(); return (parts[0]||"·").slice(0,2).toUpperCase(); }
 function _jit(seed,amp){ let h=0,st=String(seed); for(let k=0;k<st.length;k++)h=(h*131+st.charCodeAt(k))>>>0; return ((h%2000)/2000-0.5)*amp; }
+let _atlasGL=null, _atlasGLHost=null, _atlasMode=(function(){ try{ return localStorage.getItem("atlas_mode")||"globe"; }catch(_){ return "globe"; } })();
+function _atlasGroups(){
+  const byCity={}, unplaced=[];
+  PEOPLE.forEach(p=>{ const c=(p.residence||"").trim(); if(!c)return; (byCity[c]=byCity[c]||[]).push(p); });
+  const placed={};
+  Object.keys(byCity).sort().forEach(city=>{ const co=CITY_COORDS[_cnorm(city)]||CITY_COORDS[_cnorm(city.split(",")[0])]; if(co)placed[city]={co,ppl:byCity[city]}; else unplaced.push(`${city} (${byCity[city].length})`); });
+  return {placed,unplaced};
+}
+function _atlasExtraCard(unplaced){
+  const extra=document.getElementById("atlas-extra"); if(!extra)return;
+  extra.innerHTML = unplaced.length ? `<div class="card wide" style="margin-top:12px"><h2 style="border:0">✦ Awaiting their place on the globe</h2><div style="color:var(--muted);font-size:12px;line-height:1.7">${unplaced.join(" · ")}<br><br>These cities aren't in the gazetteer yet — name one and I'll set its coordinates.</div></div>` : "";
+}
+function _cityPopupHTML(city,ppl){ const names=ppl.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<div class="atlas-name" data-atlas-pid="${p.id}" style="cursor:pointer;padding:2px 0;color:#E9E3D3">• ${p.name}</div>`).join(""); return `<div style="font-family:'Cinzel',serif;color:#C8945B;font-size:14px;margin-bottom:5px">${city} · ${ppl.length}</div>${names}`; }
 function renderAtlas(){
   const C=document.getElementById("content");
-  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Atlas</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the House across the earth · zoom out to gather, zoom in to find each soul</div></div>
-    <div class="card wide" style="padding:0;overflow:hidden;border-radius:18px"><div id="atlas-map" style="height:64vh;min-height:460px;width:100%;background:#0b0d0a"></div></div>
+  const glOK=(typeof maplibregl!=="undefined");
+  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Atlas</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the House across the earth · zoom out to gather, zoom in to find each soul</div>
+    <div style="margin-top:10px"><button class="tab at-mode" data-mode="globe" style="${_atlasMode==="globe"?"border:1px solid var(--accent);color:var(--accent)":""}">🌐 The Globe</button> <button class="tab at-mode" data-mode="flat" style="${_atlasMode==="flat"?"border:1px solid var(--accent);color:var(--accent)":""}">🗺 The Chart</button></div></div>
+    <div class="card wide" style="padding:0;overflow:hidden;border-radius:18px"><div id="atlas-map" style="height:64vh;min-height:460px;width:100%;background:#07080a"></div></div>
     <div id="atlas-extra"></div>`;
-  const host=document.getElementById("atlas-map");
-  if(typeof L==="undefined"){ host.innerHTML=`<div style="padding:24px;color:var(--muted);font-family:'EB Garamond',serif">The map is still gathering itself — leave The Atlas and return in a moment.</div>`; return; }
+  C.querySelectorAll(".at-mode").forEach(b=>b.addEventListener("click",()=>{ _atlasMode=b.dataset.mode; try{ localStorage.setItem("atlas_mode",_atlasMode); }catch(_){ } renderAtlas(); }));
   if(_atlasMap){ try{_atlasMap.remove();}catch(_){ } _atlasMap=null; }
-  const map=L.map(host,{attributionControl:false,worldCopyJump:true,minZoom:2}).setView([25,10],2);
-  _atlasMap=map;
+  if(_atlasMode==="globe"&&glOK){ try{ _atlasGlobe(); }catch(e){ console.warn("globe failed → chart",e); _atlasFlat(); } }
+  else _atlasFlat();
+}
+function _atlasFlat(){
+  const host=document.getElementById("atlas-map"); if(!host)return;
+  if(typeof L==="undefined"){ host.innerHTML=`<div style="padding:24px;color:var(--muted);font-family:'EB Garamond',serif">The map is still gathering itself — leave The Atlas and return in a moment.</div>`; return; }
+  const map=L.map(host,{attributionControl:false,worldCopyJump:true,minZoom:2}).setView([25,10],2); _atlasMap=map;
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{subdomains:"abcd",maxZoom:19}).addTo(map);
-  const layer=(typeof L.markerClusterGroup==="function") ? L.markerClusterGroup({ maxClusterRadius:46, showCoverageOnHover:false, spiderfyOnMaxZoom:true, iconCreateFunction:(cl)=>L.divIcon({html:`<div class="ap-cluster">${cl.getChildCount()}</div>`, className:"", iconSize:[40,40]}) }) : L.layerGroup();
-  const bounds=[], unplaced=[];
-  PEOPLE.forEach(p=>{ const city=(p.residence||"").trim(); if(!city)return;
-    const co=CITY_COORDS[_cnorm(city)] || CITY_COORDS[_cnorm(city.split(",")[0])];
-    if(!co){ unplaced.push(city); return; }
-    const lat=co[0]+_jit(p.id+"a",0.09), lng=co[1]+_jit(p.id+"b",0.13);
-    bounds.push([lat,lng]);
-    const face=p.photo ? `<div class="ap-face" style="background-image:url('${p.photo}')"></div>` : `<div class="ap-face">${_atlasInitials(p.name)}</div>`;
-    const icon=L.divIcon({ className:"atlas-pin", html:face, iconSize:[36,36], iconAnchor:[18,18] });
-    const mk=L.marker([lat,lng],{icon,title:p.name});
-    mk.bindTooltip(`${p.name}${city?` · ${city}`:""}`,{direction:"top",offset:[0,-14]});
+  const layer=(typeof L.markerClusterGroup==="function")?L.markerClusterGroup({maxClusterRadius:46,showCoverageOnHover:false,spiderfyOnMaxZoom:true,iconCreateFunction:(cl)=>L.divIcon({html:`<div class="ap-cluster">${cl.getChildCount()}</div>`,className:"",iconSize:[40,40]})}):L.layerGroup();
+  const {placed,unplaced}=_atlasGroups(); const bounds=[];
+  Object.keys(placed).forEach(city=>{ const g=placed[city]; g.ppl.forEach(p=>{ const lat=g.co[0]+_jit(p.id+"a",0.09),lng=g.co[1]+_jit(p.id+"b",0.13); bounds.push([lat,lng]);
+    const face=p.photo?`<div class="ap-face" style="background-image:url('${p.photo}')"></div>`:`<div class="ap-face">${_atlasInitials(p.name)}</div>`;
+    const mk=L.marker([lat,lng],{icon:L.divIcon({className:"atlas-pin",html:face,iconSize:[36,36],iconAnchor:[18,18]}),title:p.name});
+    mk.bindTooltip(`${p.name} · ${city}`,{direction:"top",offset:[0,-14]});
     mk.on("click",()=>{ if(typeof showCard==="function")showCard(p); });
-    layer.addLayer(mk);
-  });
+    layer.addLayer(mk); }); });
   map.addLayer(layer);
   setTimeout(()=>{ try{ map.invalidateSize(); if(bounds.length>1)map.fitBounds(bounds,{padding:[60,60],maxZoom:6}); else if(bounds.length===1)map.setView(bounds[0],5); }catch(_){ } },170);
-  const uniq=[...new Set(unplaced)];
-  const extra=document.getElementById("atlas-extra");
-  extra.innerHTML = uniq.length ? `<div class="card wide" style="margin-top:12px"><h2 style="border:0">✦ Awaiting their place on the globe</h2><div style="color:var(--muted);font-size:12px;line-height:1.7">${uniq.join(" · ")}<br><br>These cities aren't in the gazetteer yet — name one and I'll set its coordinates. For pinpoint home locations (and a 3-D globe), we'd geocode each address once and store it.</div></div>` : "";
+  _atlasExtraCard(unplaced);
+}
+function _atlasRefreshMarkers(map){
+  (map._cityMs||[]).forEach(m=>{ try{m.remove();}catch(_){ } });
+  (map._personMs||[]).forEach(m=>{ try{m.remove();}catch(_){ } });
+  const cityMs=[],personMs=[];
+  const {placed,unplaced}=_atlasGroups();
+  Object.keys(placed).forEach(city=>{ const g=placed[city];
+    const cEl=document.createElement("div"); cEl.className="ap-cluster"; cEl.style.cursor="pointer"; cEl.textContent=g.ppl.length;
+    cityMs.push(new maplibregl.Marker({element:cEl}).setLngLat([g.co[1],g.co[0]]).setPopup(new maplibregl.Popup({offset:20,closeButton:false}).setHTML(_cityPopupHTML(city,g.ppl))).addTo(map));
+    g.ppl.forEach(p=>{ const lat=g.co[0]+_jit(p.id+"a",0.09),lng=g.co[1]+_jit(p.id+"b",0.13);
+      const w=document.createElement("div"); w.className="atlas-pin"; w.style.cursor="pointer"; w.title=`${p.name} · ${city}`;
+      w.innerHTML=p.photo?`<div class="ap-face" style="background-image:url('${p.photo}')"></div>`:`<div class="ap-face">${_atlasInitials(p.name)}</div>`;
+      w.addEventListener("click",()=>{ if(typeof showCard==="function")showCard(p); });
+      personMs.push(new maplibregl.Marker({element:w}).setLngLat([lng,lat]).addTo(map)); }); });
+  map._cityMs=cityMs; map._personMs=personMs;
+  if(map._syncFn){ try{ map.off("zoom",map._syncFn); }catch(_){ } }
+  const sync=()=>{ const showP=map.getZoom()>=4.2; personMs.forEach(m=>{ m.getElement().style.display=showP?"":"none"; }); cityMs.forEach(m=>{ m.getElement().style.display=showP?"none":""; }); };
+  map._syncFn=sync; map.on("zoom",sync); sync();
+  return unplaced;
+}
+function _atlasGlobe(){
+  const slot=document.getElementById("atlas-map"); if(!slot)return;
+  if(_atlasGL&&_atlasGLHost){ // the globe is fashioned once and kept — simply re-enthrone it
+    slot.replaceWith(_atlasGLHost);
+    setTimeout(()=>{ try{ _atlasGL.resize(); }catch(_){ } try{ _atlasGL._dress&&_atlasGL._dress(); }catch(_){ } },300);
+    _atlasExtraCard(_atlasRefreshMarkers(_atlasGL));
+    return;
+  }
+  const host=slot; _atlasGLHost=host;
+  const map=new maplibregl.Map({container:host,style:"https://demotiles.maplibre.org/style.json",center:[15,18],zoom:1.4,attributionControl:false});
+  _atlasGL=map;
+  const _dress=()=>{ // re-dress the world in the House's palette
+    // NB: a setSky with values identical to the current state is a no-op and the renderer keeps its
+    // default blue atmosphere — the alternating epsilon forces a real state change every call.
+    const _now=(window.performance&&performance.now)?performance.now():0;
+    if(map.__lastDress&&(_now-map.__lastDress)<800)return; map.__lastDress=_now;
+    map.__dt=(map.__dt||0)+1; const _eps=(map.__dt%2)?0.0001:0;
+    try{ map.setSky({"sky-color":"#07080a","horizon-color":"#14160f","fog-color":"#07080a","sky-horizon-blend":0.6,"horizon-fog-blend":0.6,"fog-ground-blend":0.7+_eps,"atmosphere-blend":_eps}); }catch(_){ }
+    try{ (map.getStyle().layers||[]).forEach(l=>{
+      if(l.type==="background") map.setPaintProperty(l.id,"background-color","#07080a");
+      else if(l.type==="fill"){ map.setPaintProperty(l.id,"fill-color","#363a28"); try{ map.setPaintProperty(l.id,"fill-outline-color","rgba(227,199,134,.35)"); }catch(_){ } }
+      else if(l.type==="line"){ map.setPaintProperty(l.id,"line-color","rgba(227,199,134,.55)"); try{ map.setPaintProperty(l.id,"line-width",1); }catch(_){ } }
+      else if(l.type==="symbol"){ try{ map.setPaintProperty(l.id,"text-color","rgba(240,234,220,.5)"); map.setPaintProperty(l.id,"text-halo-color","rgba(0,0,0,.7)"); }catch(_){ } }
+    }); }catch(_){ } };
+  map.on("style.load",()=>{ try{ map.setProjection({type:"globe"}); }catch(_){ } _dress(); });
+  map.on("load",()=>{ try{ map.resize(); }catch(_){ } _dress(); });
+  map._dress=_dress;
+  let _dressN=0; map.on("idle",()=>{ if(_dressN<6){ _dressN++; _dress(); } });
+  map.on("moveend",_dress); map.on("zoomend",_dress);
+  setInterval(_dress,2500); // heartbeat: the globe re-dresses itself for its whole life
+  [1400,3000,5200,8200].forEach(ms=>setTimeout(()=>{ try{ map.resize(); }catch(_){ } _dress(); },ms));
+  setTimeout(()=>{ try{ map.resize(); }catch(_){ } },200);
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}),"top-left");
+  const unplaced=_atlasRefreshMarkers(map);
+  let spin=true; const stopSpin=()=>{ spin=false; };
+  ["mousedown","touchstart","wheel","dragstart"].forEach(ev=>map.on(ev,stopSpin));
+  (function rot(){ if(_atlasGL!==map)return; if(spin&&map.getZoom()<3&&_atlasGLHost&&document.contains(_atlasGLHost)){ try{ const c=map.getCenter(); map.setCenter([c.lng+0.05,c.lat]); }catch(_){ } } requestAnimationFrame(rot); })();
+  _atlasExtraCard(unplaced);
 }
 document.addEventListener("click",e=>{ const a=e.target&&e.target.closest&&e.target.closest("[data-atlas-pid]"); if(a){ const p=PEOPLE.find(x=>x.id==a.dataset.atlasPid); if(p&&typeof showCard==="function")showCard(p); } });
 
