@@ -149,6 +149,7 @@
       <div class="tab" data-tab="horizons">Horizons</div>
     </div>
     <button id="refresh-btn" class="tab" style="border:1px solid var(--border)">↻ Refresh</button>
+    <button id="vigil-btn" class="tab" style="border:1px solid var(--border)" title="The Vigil — an ambient mode; the House breathes on a shelf iPad. Tap anywhere to return.">🕯</button>
     <span class="stamp" id="stamp"></span>
   </div>
 </header>
@@ -428,6 +429,70 @@ function renderGeography(){
       <div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">every city where the House has taken root · tap a soul to open them</div>
     </div><div class="grid">${html}</div>`;
 }
+
+/* ── 🕯 THE VIGIL — the House as living furniture ─────────────────── */
+let _vg={on:false,t:null,ct:null,idx:0,lock:null,photos:null};
+async function _vgPhotos(){ if(_vg.photos)return _vg.photos;
+  try{ const rows=await sbGet("interactions?select=photo_url,note,on_date&order=id.desc&limit=400"); const seen=new Set();
+    _vg.photos=(rows||[]).filter(r=>r.photo_url&&!seen.has(r.photo_url)&&seen.add(r.photo_url)); }catch(_){ _vg.photos=[]; }
+  return _vg.photos; }
+function _vgFace(p,size){ if(p.photo)return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:url('${p.photo}') center/cover;border:2px solid rgba(201,162,74,.55);margin:0 auto"></div>`;
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:radial-gradient(circle at 50% 38%, #2b2d23, #16170f);border:2px solid rgba(201,162,74,.55);margin:0 auto;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-weight:600;font-size:${Math.round(size*0.34)}px;color:#C7A24C">${_atlasInitials(p.name)}</div>`; }
+function _vgWrap(inner){ return `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8vh 8vw;background:radial-gradient(90% 80% at 50% 45%, rgba(20,22,15,.0) 0%, rgba(8,11,17,.5) 100%)">${inner}</div>`; }
+async function _vgBuild(kind){
+  const H=(t)=>`<div style="font-family:'Cinzel',serif;font-size:clamp(18px,2.6vw,30px);letter-spacing:.16em;color:#EDE6D6;text-shadow:0 1px 2px rgba(0,0,0,.5),0 0 24px rgba(0,0,0,.35)">${t}</div>`;
+  const sub=(t)=>`<div style="font-family:'EB Garamond',serif;font-style:italic;font-size:clamp(13px,1.6vw,18px);color:rgba(237,230,214,.65);margin-top:10px">${t}</div>`;
+  if(kind==="remember"){
+    const occ=s2=>{ const a=s2.split("-"); const x=new Date(`${TODAY.getFullYear()}-${a[1]}-${a[2]}`),y=new Date(`${TODAY.getFullYear()+1}-${a[1]}-${a[2]}`); const nx=x>=TODAY?x:y; return Math.ceil((nx-TODAY)/86400000); };
+    const ev=PEOPLE.filter(p=>p.birthday).map(p=>({p,d:occ(p.birthday),k:"🎂"})).concat(PEOPLE.filter(p=>p.anniversary).map(p=>({p,d:occ(p.anniversary),k:"💍"}))).filter(x=>x.d<=30).sort((a,b)=>a.d-b.d).slice(0,4);
+    if(!ev.length)return null;
+    return _vgWrap(H("TODAY THE HOUSE REMEMBERS")+`<div style="margin-top:34px;display:flex;flex-direction:column;gap:22px">${ev.map(x=>`<div style="display:flex;align-items:center;gap:18px">${_vgFace(x.p,54)}<div style="text-align:left"><div style="font-family:'EB Garamond',serif;font-size:clamp(16px,2vw,22px);color:#EDE6D6">${x.k} ${x.p.name}</div><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#C8945B;letter-spacing:.1em">${x.d===0?"TODAY":"IN "+x.d+" DAYS"}</div></div></div>`).join("")}</div>`);
+  }
+  if(kind==="portrait"){
+    const ph=await _vgPhotos(); if(!ph.length)return null;
+    const r=ph[Math.floor(Math.random()*ph.length)];
+    return `<div style="position:absolute;inset:0;background:url('${r.photo_url}') center/cover"></div><div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(8,11,17,.35) 0%, rgba(8,11,17,.1) 45%, rgba(8,11,17,.75) 100%)"></div>`+
+      `<div style="position:absolute;left:0;right:0;bottom:9vh;text-align:center;padding:0 10vw"><div style="font-family:'EB Garamond',serif;font-style:italic;font-size:clamp(15px,2vw,22px);color:#EDE6D6;text-shadow:0 1px 3px rgba(0,0,0,.7)">${r.note?esc(r.note.replace(/@/g,"")):""}</div><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.2em;color:rgba(237,230,214,.55);margin-top:8px">${r.on_date?fmtDate(r.on_date).toUpperCase():""}</div></div>`;
+  }
+  if(kind==="soul"){
+    const cand=PEOPLE.filter(p=>p.photo); const p=cand.length?cand[Math.floor(Math.random()*cand.length)]:(PEOPLE.length?PEOPLE[Math.floor(Math.random()*PEOPLE.length)]:null);
+    if(!p)return null;
+    const bits=[p.role,p.residence].filter(Boolean).join(" · ");
+    return _vgWrap(_vgFace(p,170)+`<div style="margin-top:26px">${H(p.name.toUpperCase())}</div>`+(bits?sub(bits):"")+(p.last_contact?sub("last heard "+fmtDate(p.last_contact)):""));
+  }
+  // motto
+  return _vgWrap(`<div style="font-family:'Cinzel',serif;font-size:13px;letter-spacing:.45em;color:rgba(201,162,74,.72)">THE HOUSE OF</div><div style="font-family:'Cinzel',serif;font-size:clamp(26px,4.5vw,52px);letter-spacing:.14em;color:#EDE6D6;margin-top:12px">PARSONS-AUBONE</div><div style="width:72px;height:1px;background:rgba(201,162,74,.4);margin:26px auto"></div>`+sub("In te Domine speravi")+sub("Auf dich, o Herr, habe ich gehofft"));
+}
+async function _vgTick(){ if(!_vg.on)return;
+  const seq=["remember","portrait","soul","motto"];
+  let html=null, tries=0;
+  while(html==null&&tries<4){ html=await _vgBuild(seq[_vg.idx%seq.length]); _vg.idx++; tries++; }
+  if(html==null)html=await _vgBuild("motto");
+  const front=document.getElementById(_vg.front), backId=_vg.front==="vg-a"?"vg-b":"vg-a", back=document.getElementById(backId);
+  if(!back)return; back.innerHTML=html; back.style.opacity="1"; if(front)front.style.opacity="0"; _vg.front=backId;
+}
+async function _vgRelock(){ if(_vg.on&&document.visibilityState==="visible"){ try{ _vg.lock=await navigator.wakeLock.request("screen"); }catch(_){ } } }
+async function vigilStart(){ if(_vg.on)return; _vg.on=true; _vg.idx=0;
+  const ov=document.createElement("div"); ov.id="vigil";
+  ov.style.cssText="position:fixed;inset:0;z-index:99000;background:#080B11;cursor:pointer;overflow:hidden;user-select:none;-webkit-user-select:none";
+  ov.innerHTML='<div id="vg-a" style="position:absolute;inset:0;opacity:0;transition:opacity 2.4s ease"></div><div id="vg-b" style="position:absolute;inset:0;opacity:0;transition:opacity 2.4s ease"></div><div id="vg-clock" style="position:absolute;top:26px;left:0;right:0;text-align:center;font-family:\'IBM Plex Mono\',monospace;font-size:11px;letter-spacing:.3em;color:rgba(237,230,214,.45);z-index:5"></div><div style="position:absolute;bottom:18px;left:0;right:0;text-align:center;font-family:\'Cinzel\',serif;font-size:9px;letter-spacing:.32em;color:rgba(237,230,214,.28);z-index:5">THE VIGIL · TOUCH TO RETURN</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener("pointerdown",vigilStop,{once:true});
+  _vg.front="vg-a";
+  try{ if(navigator.wakeLock)_vg.lock=await navigator.wakeLock.request("screen"); }catch(_){ }
+  document.addEventListener("visibilitychange",_vgRelock);
+  const clk=()=>{ const el=document.getElementById("vg-clock"); if(!el)return; const n=new Date(); el.textContent=n.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"}).toUpperCase()+"  ·  "+String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0"); };
+  clk(); _vg.ct=setInterval(clk,15000);
+  await _vgTick(); _vg.t=setInterval(_vgTick,22000);
+}
+function vigilStop(){ if(!_vg.on)return; _vg.on=false;
+  if(_vg.t)clearInterval(_vg.t); if(_vg.ct)clearInterval(_vg.ct); _vg.t=_vg.ct=null;
+  try{ if(_vg.lock)_vg.lock.release(); }catch(_){ } _vg.lock=null;
+  document.removeEventListener("visibilitychange",_vgRelock);
+  const ov=document.getElementById("vigil"); if(ov)ov.remove();
+}
+(function(){ const b=document.getElementById("vigil-btn"); if(b)b.addEventListener("click",()=>vigilStart());
+  try{ if(new URLSearchParams(location.search).get("vigil")==="1") setTimeout(()=>{ try{ vigilStart(); }catch(_){ } },2800); }catch(_){ } })();
 
 const _quillAfter=()=>{ try{ if(typeof TABS!=="undefined"&&TABS[activeTab])TABS[activeTab](); }catch(_){ } };
 
