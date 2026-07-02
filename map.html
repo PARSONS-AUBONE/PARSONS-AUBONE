@@ -180,7 +180,7 @@
     <h2>Nation</h2><div id="country-filters"></div>
     <h2>School</h2><div id="school-filters"></div>
     <h2>Class with our children</h2><div id="class-filters"></div>
-    <h2>Layout</h2><div><button id="re-centre" class="toggle">Re-centre</button><button id="freeze" class="toggle">Freeze</button></div>
+    <h2>Layout</h2><div><button id="re-centre" class="toggle">Re-centre</button><button id="freeze" class="toggle">Freeze</button><button id="unpin" class="toggle" title="Forget every pinned position and lay the constellation out afresh">Unpin all</button></div>
   </details>
   <div class="stamp" id="stamp"></div>
 </aside>
@@ -243,7 +243,7 @@ function desat(hex){ const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(he
   return `rgb(${Math.round(r*(1-k)+tr*k)},${Math.round(g*(1-k)+tg*k)},${Math.round(b*(1-k)+tb*k)})`; }
 try{ if(typeof cytoscape!=="undefined" && typeof cytoscapeEdgehandles!=="undefined" && !cytoscape.__ehUsed){ cytoscape.use(cytoscapeEdgehandles); cytoscape.__ehUsed=true; } }catch(e){ console.warn("edgehandles register failed",e); }
 const cy = cytoscape({
-  container: document.getElementById("cy"), wheelSensitivity:0.2, minZoom:0.12, maxZoom:4, hideEdgesOnViewport:true, textureOnViewport:true, motionBlur:false,
+  container: document.getElementById("cy"), wheelSensitivity:0.2, minZoom:0.12, maxZoom:4, hideEdgesOnViewport:true, textureOnViewport:true, motionBlur:false, boxSelectionEnabled:true, selectionType:"additive",
   style:[
     {selector:"node", style:{ "width":"data(r)","height":"data(r)","background-color":"data(col)",
       "border-width":1.5,"border-color":"#C9B37D","border-opacity":0.85,"background-fit":"cover","background-clip":"node",
@@ -258,6 +258,8 @@ const cy = cytoscape({
     {selector:"node.focus", style:{ "border-color":"#E3C786","border-width":3.5,"text-opacity":1,"color":"#F2ECDD","z-index":9999 }},
     {selector:"node[hasImg = 1].focus", style:{ "background-image":"data(imgColor)" }},
     {selector:"node.lin", style:{ "text-opacity":1 }},
+    {selector:"node.lin[unwoven = 1]", style:{ "opacity":0.45 }},
+    {selector:"node:selected", style:{ "overlay-color":"#E3C786","overlay-opacity":0.22,"overlay-padding":7 }},
     {selector:"node.dim", style:{ "opacity":0.05 }},
     {selector:"edge", style:{ "width":"data(lw)","line-color":"data(lcol)","opacity":0.42,"curve-style":"straight" }},
     {selector:"edge[dash = \"1\"]", style:{ "line-style":"dashed","line-dash-pattern":[5,4] }},
@@ -695,6 +697,24 @@ function layoutClusters(keys){
   return res;
 }
 
+/* ── Pinned constellation: a soul stays where you set her ─────────── */
+let _pinsLocal=(function(){ try{ return JSON.parse(localStorage.getItem("map_pins")||"{}"); }catch(_){ return {}; } })();
+function _pinnedPos(p){ if(p.map_x!=null&&p.map_y!=null) return {x:p.map_x,y:p.map_y}; const l=_pinsLocal[p.id]; return (l&&l.x!=null)?{x:l.x,y:l.y}:null; }
+async function _savePins(nodes){ if(_lineage)return;
+  const rows=[];
+  nodes.forEach(n=>{ const id=Number(n.id()); const p=PEOPLE.find(x=>x.id===id); if(!p)return; const pos=n.position();
+    p.map_x=pos.x; p.map_y=pos.y; _pinsLocal[id]={x:pos.x,y:pos.y}; rows.push({id,x:pos.x,y:pos.y}); });
+  try{ localStorage.setItem("map_pins",JSON.stringify(_pinsLocal)); }catch(_){ }
+  for(const r of rows){ try{ await sbPatch("contacts","id",r.id,{map_x:r.x,map_y:r.y}); }
+    catch(e){ if(!window.__pinWarn){ window.__pinWarn=true; toast("Pinned on this device — run 05_positions.sql to keep it on every device",true); } break; } }
+}
+cy.on("dragfree","node",e=>{ try{ _savePins(cy.$("node:selected").union(e.target)); }catch(_){ } });
+async function unpinAll(){
+  _pinsLocal={}; try{ localStorage.removeItem("map_pins"); }catch(_){ }
+  PEOPLE.forEach(p=>{ p.map_x=null; p.map_y=null; });
+  try{ await fetch(`${SUPA.url}/rest/v1/contacts?map_x=not.is.null`,{method:"PATCH",headers:{...sbH(),Prefer:"return=minimal"},body:JSON.stringify({map_x:null,map_y:null})}); }catch(_){ }
+  toast("The constellation breathes free again"); renderGraph();
+}
 function isolateCircle(cid){ const c=CIRCLE_MAP[String(cid)]; state.visibleCircleIds=new Set([String(cid)]); try{ buildFilters(); }catch(_){ } renderGraph(); toast(`Showing ${c?c.label:"circle"} only — Filters to restore`); }
 let geoRes="";
 function applyGeo(res){ geoRes=res; cy.batch(()=>{ cy.elements().removeClass("geo-dim");
@@ -723,33 +743,64 @@ function renderHorizons(){
 }
 
 let _lineage=false;
-function _lineageLayout(people, links){
+function _lineageMembers(people){
   const byId=Object.fromEntries(people.map(p=>[p.id,p]));
-  const rank={};
-  function getRank(p, stack){ if(rank[p.id]!=null)return rank[p.id]; if(stack.has(p.id))return 0; stack.add(p.id);
-    const ps=(p.parentIds||[]).map(id=>byId[id]).filter(Boolean);
-    const r=ps.length? Math.max.apply(null,ps.map(x=>getRank(x,stack)))+1 : 0;
-    rank[p.id]=r; stack.delete(p.id); return r; }
-  people.forEach(p=>getRank(p,new Set()));
-  for(let k=0;k<3;k++){
-    people.forEach(p=>{ const q=p.partnerId&&byId[p.partnerId]; if(q&&rank[q.id]!=null){ const m=Math.max(rank[p.id],rank[q.id]); rank[p.id]=m; rank[q.id]=m; } });
-    people.forEach(p=>{ const ps=(p.parentIds||[]).map(id=>byId[id]).filter(Boolean); if(ps.length){ const m=Math.max.apply(null,ps.map(x=>rank[x.id]))+1; if(m>rank[p.id])rank[p.id]=m; } });
+  const linked=new Set();
+  people.forEach(p=>{ const q=p.partnerId&&byId[p.partnerId]; if(q){ linked.add(p.id); linked.add(p.partnerId); }
+    (p.parentIds||[]).forEach(pid=>{ if(byId[pid]){ linked.add(p.id); linked.add(pid); } }); });
+  return linked;
+}
+function _lineageLayout(people, links){
+  const memb=_lineageMembers(people);
+  const woven=people.filter(p=>memb.has(p.id));
+  const byId=Object.fromEntries(woven.map(p=>[p.id,p]));
+  const adj={}; const add=(a,b)=>{ (adj[a]=adj[a]||new Set()).add(b); (adj[b]=adj[b]||new Set()).add(a); };
+  woven.forEach(p=>{ const q=p.partnerId&&byId[p.partnerId]; if(q)add(p.id,p.partnerId); (p.parentIds||[]).forEach(pid=>{ if(byId[pid])add(p.id,pid); }); });
+  const seen=new Set(), comps=[];
+  woven.forEach(p=>{ if(seen.has(p.id))return; seen.add(p.id); const q=[p.id], comp=[byId[p.id]];
+    while(q.length){ const id=q.pop(); (adj[id]?[...adj[id]]:[]).forEach(n=>{ if(!seen.has(n)){ seen.add(n); q.push(n); comp.push(byId[n]); } }); }
+    comps.push(comp); });
+  const XS=120, YS=175, GAPX=240, GAPY=330;
+  function layoutComp(comp){
+    const cid=Object.fromEntries(comp.map(p=>[p.id,p]));
+    const rank={};
+    function getRank(p, stack){ if(rank[p.id]!=null)return rank[p.id]; if(stack.has(p.id))return 0; stack.add(p.id);
+      const ps=(p.parentIds||[]).map(id=>cid[id]).filter(Boolean);
+      const r=ps.length? Math.max.apply(null,ps.map(x=>getRank(x,stack)))+1 : 0;
+      rank[p.id]=r; stack.delete(p.id); return r; }
+    comp.forEach(p=>getRank(p,new Set()));
+    for(let k=0;k<3;k++){
+      comp.forEach(p=>{ const q=p.partnerId&&cid[p.partnerId]; if(q&&rank[q.id]!=null){ const m=Math.max(rank[p.id],rank[q.id]); rank[p.id]=m; rank[q.id]=m; } });
+      comp.forEach(p=>{ const ps=(p.parentIds||[]).map(id=>cid[id]).filter(Boolean); if(ps.length){ const m=Math.max.apply(null,ps.map(x=>rank[x.id]))+1; if(m>rank[p.id])rank[p.id]=m; } });
+    }
+    const rows={}; comp.forEach(p=>{ (rows[rank[p.id]]=rows[rank[p.id]]||[]).push(p); });
+    const ranks=Object.keys(rows).map(Number).sort((a,b)=>a-b);
+    const xpos={};
+    function glue(row,r){ const placed=[],s2=new Set(); row.forEach(p=>{ if(s2.has(p.id))return; placed.push(p); s2.add(p.id); const q=p.partnerId&&cid[p.partnerId]; if(q&&rank[q.id]===r&&!s2.has(q.id)){ placed.push(q); s2.add(q.id); } }); return placed; }
+    ranks.forEach(r=>{ rows[r].sort((a,b)=>(a.name||"").localeCompare(b.name||"")); rows[r]=glue(rows[r],r); rows[r].forEach((p,i)=>xpos[p.id]=i); });
+    function apx(p){ const ps=(p.parentIds||[]).map(id=>cid[id]).filter(Boolean); if(!ps.length)return xpos[p.id]||0; return ps.reduce((t,x)=>t+(xpos[x.id]||0),0)/ps.length; }
+    for(let k=0;k<3;k++){ ranks.forEach((r,ri)=>{ if(ri===0)return; rows[r].sort((a,b)=>apx(a)-apx(b)); rows[r]=glue(rows[r],r); rows[r].forEach((p,i)=>xpos[p.id]=i); }); }
+    const wCells=Math.max.apply(null,ranks.map(r=>rows[r].length));
+    const w=Math.max(0,(wCells-1)*XS), h=Math.max(0,(ranks.length-1)*YS);
+    const pos={};
+    ranks.forEach((r,ri)=>{ const row=rows[r]; const rw=(row.length-1)*XS; row.forEach((p,i)=>{ pos[String(p.id)]={x:i*XS+(w-rw)/2, y:ri*YS}; }); });
+    return {w,h,pos};
   }
-  const rows={}; people.forEach(p=>{ (rows[rank[p.id]]=rows[rank[p.id]]||[]).push(p); });
-  const ranks=Object.keys(rows).map(Number).sort((a,b)=>a-b);
-  const xpos={};
-  function glue(row,r){ const placed=[],seen=new Set();
-    row.forEach(p=>{ if(seen.has(p.id))return; placed.push(p); seen.add(p.id); const q=p.partnerId&&byId[p.partnerId]; if(q&&rank[q.id]===r&&!seen.has(q.id)){ placed.push(q); seen.add(q.id); } });
-    return placed; }
-  ranks.forEach(r=>{ rows[r].sort((a,b)=>(a.name||"").localeCompare(b.name||"")); rows[r]=glue(rows[r],r); rows[r].forEach((p,i)=>xpos[p.id]=i); });
-  function avgParentX(p){ const ps=(p.parentIds||[]).map(id=>byId[id]).filter(Boolean); if(!ps.length)return xpos[p.id]||0; return ps.reduce((t,x)=>t+(xpos[x.id]||0),0)/ps.length; }
-  for(let k=0;k<3;k++){
-    ranks.forEach(r=>{ if(r===0)return;
-      rows[r].sort((a,b)=>avgParentX(a)-avgParentX(b));
-      rows[r]=glue(rows[r],r); rows[r].forEach((p,i)=>xpos[p.id]=i); });
-  }
-  const XS=130, YS=185, pos={};
-  ranks.forEach(r=>{ const row=rows[r]; const w=(row.length-1)*XS; row.forEach((p,i)=>{ pos[String(p.id)]={x:i*XS-w/2, y:r*YS}; }); });
+  const placed=comps.map(layoutComp);
+  const totalW=placed.reduce((t,c)=>t+c.w+GAPX,0);
+  const maxW=Math.max(1500, Math.sqrt(Math.max(1,totalW)*900));
+  let cx=0, cy0=0, rowH=0, right=0; const pos={};
+  placed.sort((a,b)=>b.w-a.w).forEach(c=>{
+    if(cx>0 && cx+c.w>maxW){ cx=0; cy0+=rowH+GAPY; rowH=0; }
+    Object.keys(c.pos).forEach(id=>{ pos[id]={x:c.pos[id].x+cx, y:c.pos[id].y+cy0}; });
+    right=Math.max(right,cx+c.w); cx+=c.w+GAPX; rowH=Math.max(rowH,c.h);
+  });
+  // the rest keep their own company: a soft golden-angle cloud beneath the islands — never a line
+  const rest=people.filter(p=>!memb.has(p.id));
+  const cX=placed.length?right/2:0;
+  const y0=placed.length?(cy0+rowH+GAPY+380):0;
+  rest.forEach((p,i)=>{ const a=i*2.39996449; const r=88*Math.sqrt(i+0.7);
+    pos[String(p.id)]={x:cX+r*Math.cos(a), y:y0+r*Math.sin(a)*0.62}; });
   return pos;
 }
 
@@ -785,7 +836,8 @@ function renderGraph(){
   const visIds=new Set(visible.map(p=>p.id));
   const links=buildLinks().filter(l=>{const s=typeof l.source==="object"?l.source.id:l.source,tt=typeof l.target==="object"?l.target.id:l.target;return visIds.has(s)&&visIds.has(tt);});
   const links2=_lineage?links.filter(l=>l.type==="partner"||l.type==="parent"):links;
-  const els=visible.map(p=>{ const c=_imgCache[p.id]; return { data:{ id:String(p.id), label:shortLabel(p), r:nodeRadius(p)*2, col:desat((p.circle||{}).colour), partner:p.partnerId?1:0, residence:p.residence||"", cool:coolOf(p)?1:0, hasImg:c?1:0, img:c?c.gray:"", imgColor:c?c.color:"" } }; });
+  const _lm=_lineage?_lineageMembers(visible):null;
+  const els=visible.map(p=>{ const c=_imgCache[p.id]; return { data:{ id:String(p.id), label:shortLabel(p), r:nodeRadius(p)*2, col:desat((p.circle||{}).colour), partner:p.partnerId?1:0, residence:p.residence||"", cool:coolOf(p)?1:0, unwoven:(_lm&&!_lm.has(p.id))?1:0, hasImg:c?1:0, img:c?c.gray:"", imgColor:c?c.color:"" } }; });
   links2.forEach((l,i)=>{ const s=String(typeof l.source==="object"?l.source.id:l.source), tt=String(typeof l.target==="object"?l.target.id:l.target);
     els.push({ data:{ id:"x"+i, source:s, target:tt, type:l.type,
       lcol:l.type==="partner"?"#E3C786":l.type==="household"?"#C0A35F":l.type==="parent"?"#9A7B3F":"#8E856F",
@@ -803,7 +855,8 @@ function renderGraph(){
       edgeElasticity:(e)=>{ const t=e.data("type"); return t==="partner"?260:t==="household"?150:100; },
       gravity:0.3, numIter:1200, nodeDimensionsIncludeLabels:true }).run();
   }
-  const st=document.getElementById("stats"); if(st) st.textContent=`${visible.length} souls · ${links2.length} threads${_lineage?" · the Lineage":""}`;
+  if(!_lineage){ cy.batch(()=>{ cy.nodes().forEach(n=>{ const pr=PEOPLE.find(x=>String(x.id)===n.id()); const pp=pr&&_pinnedPos(pr); if(pp) n.position(pp); }); }); }
+  const st=document.getElementById("stats"); if(st) st.textContent=`${visible.length} souls · ${links2.length} threads${_lineage&&_lm?` · the Lineage — ${_lm.size} woven, ${visible.length-_lm.size} keeping their own company`:""}`;
   if(!window._imgPrepDone && !window._imgPrepping){ window._imgPrepping=true; _prepImages(PEOPLE).then(()=>{ window._imgPrepDone=true; window._imgPrepping=false; _applyImages(); }).catch(()=>{ window._imgPrepping=false; }); }
   if(typeof renderHorizons==="function") renderHorizons();
   if(geoRes) applyGeo(geoRes);
@@ -1119,6 +1172,7 @@ document.querySelectorAll("[data-link]").forEach(btn=>{
   });
 });
 document.getElementById("re-centre").addEventListener("click",()=>{ cy.animate({fit:{eles:cy.elements(),padding:50}},{duration:450}); });
+document.getElementById("unpin").addEventListener("click",unpinAll);
 document.getElementById("freeze").addEventListener("click",e=>{ state.frozen=!state.frozen; e.target.classList.toggle("on"); try{cy.autolock(state.frozen);}catch(_){ } });
 document.getElementById("search").addEventListener("input",e=>{
   const q=e.target.value.toLowerCase().trim();
@@ -1302,7 +1356,7 @@ async function refreshFromMonday(){
         childrenNotes:c.children_notes, pets:c.pets, dietary:c.dietary, tags:[],
         phone:c.phone, email:c.email, location:c.address,
         school:c.school, schoolYear:c.school_year, classKid:c.class_kid,
-        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion, residence:c.residence, last_contact:c.last_contact, is_female:c.is_female, allergies:c.allergies, values_notes:c.values_notes, cadence_days:c.cadence_days };
+        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion, residence:c.residence, last_contact:c.last_contact, is_female:c.is_female, allergies:c.allergies, values_notes:c.values_notes, cadence_days:c.cadence_days, map_x:c.map_x, map_y:c.map_y };
     });
     const byId=Object.fromEntries(fresh.map(p=>[p.id,p]));
     for(const p of fresh){ if(p.partnerId&&byId[p.partnerId]){ const q=byId[p.partnerId]; const best=Math.min(p.closeness.tier,q.closeness.tier); const lbl=p.closeness.tier===best?p.closeness.label:q.closeness.label; p.closeness=q.closeness={tier:best,label:lbl}; } }
