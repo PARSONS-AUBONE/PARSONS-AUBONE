@@ -896,10 +896,11 @@ const HZ_CANON=[
   {key:"Melbourne",glyph:"🌃",colour:"#C49A4A"}
 ];
 const HZ_PAL=["#C9A24A","#A98FB0","#7BB0DA","#5E8B6A","#C8945B","#9AA7B3","#C97F7F","#83A18B"];
+function _cityish(k){ return HZ_CANON.some(c=>c.key===k) || (!/[\d,]/.test(k) && k.length<=24); }
 function hzMeta(k){ const c=HZ_CANON.find(x=>x.key===k); if(c)return c; let h=0; for(let i=0;i<k.length;i++)h=(h*31+k.charCodeAt(i))>>>0; return {key:k,glyph:"📍",colour:HZ_PAL[h%HZ_PAL.length]}; }
 function renderHorizons(){
   const el=document.getElementById("horizons"); if(!el)return;
-  const present=[...new Set(PEOPLE.map(p=>(p.residence||"").trim()).filter(Boolean))];
+  const present=[...new Set(PEOPLE.map(p=>(p.residence||"").trim()).filter(Boolean))].filter(_cityish);
   const canon=HZ_CANON.map(c=>c.key).filter(k=>present.includes(k));
   const extra=present.filter(k=>!HZ_CANON.find(c=>c.key===k)).sort((a,b)=>a.localeCompare(b));
   const order=[...canon,...extra];
@@ -1152,8 +1153,8 @@ function selectPerson(d){
     ${statusRow("Class with our kid",d.classKid,"color_mm3vqpx1","classKid")}
     ${(d.is_female||d.maidenName)?`<div style="margin-top:4px">👰 <strong>Maiden name:</strong> ${d.maidenName?d.maidenName:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-col="text_mm4rgpf" data-label="Maiden name" data-multi="0">✎</span></div>`:""}
     <div style="margin-top:4px"><strong>Age:</strong> ${ageOf(d)!=null?`${ageOf(d)}${d.birthday?` <span style="color:var(--muted);font-size:11px">· from birthday</span>`:""}`:`<span style="color:var(--muted)">—</span>`}${d.birthday?"":` <span class="edit-link" data-num="numeric_mm3wz3fb" data-label="Age">✎</span>`}</div>
-    <div style="margin-top:4px">📞 ${d.phone?d.phone:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="phone" data-label="Phone">✎</span></div>
-    <div style="margin-top:4px">✉ ${d.email?d.email:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="email" data-label="Email">✎</span></div>
+    <div style="margin-top:4px">📞 ${d.phone?`<span data-phone="${esc(d.phone)}" style="cursor:pointer;border-bottom:1px dotted rgba(199,162,74,.5)">${esc(d.phone)}</span>`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="phone" data-label="Phone">✎</span></div>
+    <div style="margin-top:4px">✉ ${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--soft);text-decoration:none;border-bottom:1px dotted rgba(199,162,74,.5)">${esc(d.email)}</a>`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="email" data-label="Email">✎</span></div>
     <div style="margin-top:4px">🏠 <strong>Household:</strong> ${d.household?d.household:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-household-btn">✎</span></div>
   </div></div>`;
 
@@ -1162,6 +1163,7 @@ function selectPerson(d){
   const _pen = (_lcD!=null && _lcD>(d.cadence_days||180));
   const houseHTML=`<div class="info-section"><h3>📍 Of the House</h3><div style="font-size:13px;line-height:1.7">
     <div>📍 <strong>Residence:</strong> ${d.residence?`<span data-gores="${String(d.residence).replace(/"/g,'&quot;')}" style="cursor:pointer;border-bottom:1px dotted rgba(199,162,76,.6)">${d.residence}</span>`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-residence-btn">✎</span></div>
+    <div style="margin-top:4px">🏡 <strong>Address:</strong> ${d.address?`<span data-addr="1" style="cursor:pointer;border-bottom:1px dotted rgba(199,162,74,.6)">${esc(d.address)}</span>`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-address-btn">✎</span></div>
     <div style="margin-top:4px">🌒 <strong>Last heard from:</strong> ${d.last_contact?`${fmtDate(d.last_contact)} <span style="color:${_pen?'#C8945B':'var(--muted)'}">· ${_penM} ${_penM===1?'month':'months'} ago${_pen?' · in penumbra':''}</span>`:`<span style="color:var(--muted)">no correspondence recorded yet</span>`} <span class="edit-link" id="edit-lastcontact-btn">✎</span></div>
     <div style="margin-top:4px">⚠ <strong>Allergies &amp; care:</strong> ${d.allergies?d.allergies:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-allergies-btn">✎</span></div>
     <div style="margin-top:4px">✦ <strong>Values &amp; traditions:</strong> ${d.values_notes?d.values_notes:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-values-btn">✎</span></div>
@@ -1227,6 +1229,9 @@ function selectPerson(d){
   infoEl.querySelectorAll("[data-rmcircle]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();removeCircleFromContact(d.id,x.dataset.rmcircle);}));
   infoEl.querySelectorAll("[data-gocircle]").forEach(el=>el.addEventListener("click",ev=>{ if(ev.target.classList&&ev.target.classList.contains("chip-x"))return; isolateCircle(el.dataset.gocircle); }));
   infoEl.querySelectorAll("[data-gores]").forEach(el=>el.addEventListener("click",()=>{ applyGeo(el.dataset.gores); renderHorizons(); toast("Lighting "+el.dataset.gores+" ✦"); }));
+  const eab=document.getElementById("edit-address-btn"); if(eab)eab.addEventListener("click",()=>_editAddress(d));
+  infoEl.querySelectorAll("[data-addr]").forEach(el=>el.addEventListener("click",()=>_addrActions(d)));
+  infoEl.querySelectorAll("[data-phone]").forEach(el=>el.addEventListener("click",()=>_phoneActions(el.dataset.phone)));
   const eb=document.getElementById("edit-bday"); if(eb)eb.addEventListener("click",()=>editDate(d,"date_mm03gvpg",d.birthday));
   const ea=document.getElementById("edit-anniv"); if(ea)ea.addEventListener("click",()=>editDate(d,"date_mm4rwpfj",d.anniversary));
   const en=document.getElementById("edit-nat"); if(en)en.addEventListener("click",()=>editNationality(d));
@@ -1534,7 +1539,7 @@ async function refreshFromMonday(){
         childrenNotes:c.children_notes, pets:c.pets, dietary:c.dietary, tags:[],
         phone:c.phone, email:c.email, location:c.address,
         school:c.school, schoolYear:c.school_year, classKid:c.class_kid,
-        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion, residence:c.residence, last_contact:c.last_contact, is_female:c.is_female, allergies:c.allergies, values_notes:c.values_notes, cadence_days:c.cadence_days, map_x:c.map_x, map_y:c.map_y };
+        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion, residence:c.residence, last_contact:c.last_contact, is_female:c.is_female, allergies:c.allergies, values_notes:c.values_notes, cadence_days:c.cadence_days, map_x:c.map_x, map_y:c.map_y, address:c.address, home_lat:c.home_lat, home_lng:c.home_lng };
     });
     const byId=Object.fromEntries(fresh.map(p=>[p.id,p]));
     for(const p of fresh){ if(p.partnerId&&byId[p.partnerId]){ const q=byId[p.partnerId]; const best=Math.min(p.closeness.tier,q.closeness.tier); const lbl=p.closeness.tier===best?p.closeness.label:q.closeness.label; p.closeness=q.closeness={tier:best,label:lbl}; } }
@@ -1793,8 +1798,66 @@ async function loadGifts(who){
   }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load keepsakes.</span>`; console.warn(e); }
 }
 
+/* ── Home on the earth: exact address, navigation, reachable souls ── */
+async function _editAddress(person){
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:430px;max-width:94vw"><div class="picker-head"><h3>🏡 Address — ${esc(person.name)}</h3>
+    <input id="ad-in" type="text" placeholder="Begin typing the address… (street, city)" value="${esc(person.address||"")}" style="${_IN}" autocomplete="off">
+    <div id="ad-list" style="max-height:230px;overflow-y:auto;margin-top:8px"></div></div>
+    <div class="picker-foot"><button class="toggle" id="ad-clear">Clear</button> <button class="toggle" id="ad-x">Cancel</button></div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector("#ad-in"), list=ov.querySelector("#ad-list"); let tmr=null;
+  const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov)close(); });
+  ov.querySelector("#ad-x").addEventListener("click",close);
+  ov.querySelector("#ad-clear").addEventListener("click",async()=>{ close();
+    try{ await sbPatch("contacts","id",person.id,{address:null,home_lat:null,home_lng:null}); person.address=null; person.home_lat=null; person.home_lng=null; toast("Address cleared"); if(currentPerson&&currentPerson.id===person.id)selectPerson(person); }catch(e){ toast("Couldn’t save",true); } });
+  function lbl(f){ const p=f.properties||{}; const street=p.housenumber?(p.housenumber+" "+(p.street||"")).trim():(p.street||"");
+    return [p.name,street,p.district,p.city||p.town||p.village,p.state,p.country].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(", "); }
+  async function search(q){ if(!q||q.length<3){ list.innerHTML=""; return; }
+    try{ const r=await fetch("https://photon.komoot.io/api/?q="+encodeURIComponent(q)+"&limit=6&lang=en"); const j=await r.json();
+      list.innerHTML=(j.features||[]).map((f,i)=>`<div class="picker-item" data-i="${i}" style="align-items:flex-start"><span class="pi-dot" style="background:#C9A24A;margin-top:6px;flex-shrink:0"></span><span style="font-size:13px;line-height:1.45">${esc(lbl(f))}</span></div>`).join("")||`<div style="padding:12px;color:var(--muted);font-size:12px">No places found — keep typing.</div>`;
+      list.querySelectorAll(".picker-item").forEach(el=>el.addEventListener("click",async()=>{ const f=j.features[+el.dataset.i]; const c=f.geometry.coordinates; const addr=lbl(f); close();
+        const _pp=f.properties||{}; const _city=_pp.city||_pp.town||_pp.village||null;
+        const _body={address:addr,home_lat:c[1],home_lng:c[0]};
+        if(_city&&(!person.residence||!_cityish(person.residence))){ _body.residence=_city; }
+        try{ await sbPatch("contacts","id",person.id,_body); person.address=addr; person.home_lat=c[1]; person.home_lng=c[0]; if(_body.residence)person.residence=_body.residence; toast("Home marked upon the earth ✦"+(_body.residence?" · "+_body.residence:"")); if(currentPerson&&currentPerson.id===person.id)selectPerson(person); }
+        catch(e){ toast("Couldn’t save — has 06_home.sql been run?",true); console.warn(e); } }));
+    }catch(e){ list.innerHTML=`<div style="padding:12px;color:var(--muted);font-size:12px">The gazetteer is unreachable just now.</div>`; } }
+  inp.addEventListener("input",()=>{ clearTimeout(tmr); tmr=setTimeout(()=>search(inp.value.trim()),350); });
+  inp.focus();
+}
+function _addrActions(person){
+  const lat=person.home_lat, lng=person.home_lng, has=(lat!=null&&lng!=null);
+  const g=has?`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`:`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(person.address||"")}`;
+  const ap=has?`https://maps.apple.com/?daddr=${lat},${lng}`:`https://maps.apple.com/?q=${encodeURIComponent(person.address||"")}`;
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:400px;max-width:94vw"><div class="picker-head"><h3>🏡 ${esc(person.address||"Address")}</h3></div>
+    <div style="display:flex;flex-direction:column;gap:8px;padding:12px 2px">
+      ${has?`<button class="toggle" data-fly="1" style="padding:13px;text-align:left;font-size:14px">🌍 &nbsp;Fly there — the Atlas</button>`:""}
+      <a class="toggle" style="padding:13px;text-align:left;font-size:14px;display:block;text-decoration:none" href="${g}" target="_blank" rel="noopener">🧭 &nbsp;Google Maps — directions</a>
+      <a class="toggle" style="padding:13px;text-align:left;font-size:14px;display:block;text-decoration:none" href="${ap}" target="_blank" rel="noopener">🍎 &nbsp;Apple Maps — directions</a>
+    </div><div class="picker-foot"><button class="toggle" id="aa-x">Close</button></div></div>`;
+  document.body.appendChild(ov); const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov)close(); });
+  ov.querySelector("#aa-x").addEventListener("click",close);
+  const fb=ov.querySelector("[data-fly]"); if(fb)fb.addEventListener("click",()=>{ close(); location.href="insights.html?fly="+lat+","+lng+","+encodeURIComponent(person.name); });
+}
+function _phoneActions(num){
+  const digits=String(num).replace(/[^\d+]/g,""); const wa=digits.replace(/^\+/,"");
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:360px;max-width:94vw"><div class="picker-head"><h3>📞 ${esc(num)}</h3></div>
+    <div style="display:flex;flex-direction:column;gap:8px;padding:12px 2px">
+      <a class="toggle" style="padding:13px;display:block;text-align:left;font-size:14px;text-decoration:none" href="tel:${digits}">📞 &nbsp;Call</a>
+      <a class="toggle" style="padding:13px;display:block;text-align:left;font-size:14px;text-decoration:none" href="sms:${digits}">💬 &nbsp;Message (SMS)</a>
+      <a class="toggle" style="padding:13px;display:block;text-align:left;font-size:14px;text-decoration:none" href="https://wa.me/${wa}" target="_blank" rel="noopener">🟢 &nbsp;WhatsApp</a>
+    </div><div class="picker-foot"><button class="toggle" id="pa-x">Close</button></div></div>`;
+  document.body.appendChild(ov); const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov)close(); });
+  ov.querySelector("#pa-x").addEventListener("click",close);
+}
 async function editResidence(d){
-  const present=[...new Set(PEOPLE.map(p=>(p.residence||"").trim()).filter(Boolean))];
+  const present=[...new Set(PEOPLE.map(p=>(p.residence||"").trim()).filter(Boolean))].filter(_cityish);
   const all=[...new Set([...HZ_CANON.map(c=>c.key),...present])];
   const ov=document.createElement("div"); ov.className="picker-overlay";
   const chips=all.map(c=>`<button class="toggle" data-city="${esc(c)}" style="margin:3px 4px 0 0${d.residence===c?';border-color:var(--gold);color:var(--gold-bright)':''}">${hzMeta(c).glyph} ${esc(c)}</button>`).join("");

@@ -393,6 +393,7 @@ const HZ_CANON=[
   {key:"Melbourne",glyph:"🌃",colour:"#C49A4A"}
 ];
 const HZ_PAL=["#C9A24A","#A98FB0","#7BB0DA","#5E8B6A","#C8945B","#9AA7B3","#C97F7F","#83A18B"];
+function _cityish(k){ return (typeof CITY_COORDS!=="undefined"&&CITY_COORDS[_cnorm(k)]) || (typeof HZ_CANON!=="undefined"&&HZ_CANON.some(c=>c.key===k)) || (!/[\d,]/.test(k) && k.length<=24); }
 function hzMeta(k){ const c=HZ_CANON.find(x=>x.key===k); if(c)return c; let h=0; for(let i=0;i<k.length;i++)h=(h*31+k.charCodeAt(i))>>>0; return {key:k,glyph:"📍",colour:HZ_PAL[h%HZ_PAL.length]}; }
 
 async function _fillOnThisDay(){
@@ -457,7 +458,7 @@ function renderGeography(){
   const SUBS={"Ireland":"Éire · the old seat","München":"Bayern · the Residenz","Buenos Aires":"Argentina · the pampas","Melbourne":"Victoria · the present hearth"};
   const present=[...new Set(PEOPLE.map(p=>(p.residence||"").trim()).filter(Boolean))];
   const canonKeys=HZ_CANON.map(c=>c.key);
-  const order=[...canonKeys, ...present.filter(k=>!canonKeys.includes(k)).sort((a,b)=>a.localeCompare(b))];
+  const order=[...canonKeys, ...present.filter(k=>!canonKeys.includes(k)&&_cityish(k)).sort((a,b)=>a.localeCompare(b))];
   const groups=order.map(k=>{const m=hzMeta(k); return {key:k,glyph:m.glyph,colour:m.colour,sub:SUBS[k]||"",people:PEOPLE.filter(p=>(p.residence||"").trim()===k).sort((a,b)=>a.closeness.tier-b.closeness.tier)};});
   const placed=new Set(groups.flatMap(g=>g.people.map(p=>p.id)));
   const other=PEOPLE.filter(p=>!placed.has(p.id));
@@ -537,7 +538,10 @@ function vigilStop(){ if(!_vg.on)return; _vg.on=false;
   const ov=document.getElementById("vigil"); if(ov)ov.remove();
 }
 (function(){ const b=document.getElementById("vigil-btn"); if(b)b.addEventListener("click",()=>vigilStart());
-  try{ if(new URLSearchParams(location.search).get("vigil")==="1") setTimeout(()=>{ try{ vigilStart(); }catch(_){ } },2800); }catch(_){ } })();
+  try{ const _q=new URLSearchParams(location.search);
+    if(_q.get("vigil")==="1") setTimeout(()=>{ try{ vigilStart(); }catch(_){ } },2800);
+    const _f=_q.get("fly"); if(_f){ const _a=_f.split(","); setTimeout(()=>{ try{ atlasFly(parseFloat(_a[0]),parseFloat(_a[1]),decodeURIComponent(_a[2]||"")); }catch(_){ } },2600); }
+  }catch(_){ } })();
 
 const _quillAfter=()=>{ try{ if(typeof TABS!=="undefined"&&TABS[activeTab])TABS[activeTab](); }catch(_){ } };
 
@@ -861,6 +865,19 @@ const CITY_COORDS={
 };
 function _atlasInitials(name){ const parts=(name||"").replace(/\([^)]*\)/g,"").replace(/"[^"]+"/g,"").trim().split(/\s+/).filter(Boolean); if(parts.length>=2) return (parts[1][0]+parts[0][0]).toUpperCase(); return (parts[0]||"·").slice(0,2).toUpperCase(); }
 function _jit(seed,amp){ let h=0,st=String(seed); for(let k=0;k<st.length;k++)h=(h*131+st.charCodeAt(k))>>>0; return ((h%2000)/2000-0.5)*amp; }
+function atlasFly(lat,lng,label){
+  gotoTab("atlas");
+  const fly2=()=>{ try{ if(!_atlasMap)return; _atlasMap.setView([lat,lng],4); _atlasMap.flyTo([lat,lng],17,{duration:4.4});
+    setTimeout(()=>{ try{ if(_atlasMap&&_atlasMap.getZoom()<15)_atlasMap.setView([lat,lng],17); }catch(_){ } },6200); // guaranteed arrival
+    if(label)setTimeout(()=>{ try{ L.popup({offset:[0,-8]}).setLatLng([lat,lng]).setContent(`<div style="font-family:'Cinzel',serif;color:#C8945B;font-size:13px">🏡 ${esc(label)}</div>`).openOn(_atlasMap); }catch(_){ } },4600); }catch(_){ } };
+  setTimeout(()=>{
+    if(_atlasMode!=="flat"){
+      if(_atlasGL){ try{ _atlasGL.flyTo({center:[lng,lat],zoom:3.6,duration:2400,essential:true}); }catch(_){ }
+        setTimeout(()=>{ _atlasMode="flat"; try{localStorage.setItem("atlas_mode","flat");}catch(_){ } renderAtlas(); setTimeout(fly2,1000); },2500); return; }
+      _atlasMode="flat"; try{localStorage.setItem("atlas_mode","flat");}catch(_){ } renderAtlas(); setTimeout(fly2,1000); return; }
+    setTimeout(fly2,900);
+  },300);
+}
 let _atlasGL=null, _atlasGLHost=null, _atlasMode=(function(){ try{ return localStorage.getItem("atlas_mode")||"globe"; }catch(_){ return "globe"; } })();
 function _atlasGroups(){
   const byCity={}, unplaced=[];
@@ -893,12 +910,20 @@ function _atlasFlat(){
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{subdomains:"abcd",maxZoom:19}).addTo(map);
   const layer=(typeof L.markerClusterGroup==="function")?L.markerClusterGroup({maxClusterRadius:46,showCoverageOnHover:false,spiderfyOnMaxZoom:true,iconCreateFunction:(cl)=>L.divIcon({html:`<div class="ap-cluster">${cl.getChildCount()}</div>`,className:"",iconSize:[40,40]})}):L.layerGroup();
   const {placed,unplaced}=_atlasGroups(); const bounds=[];
-  Object.keys(placed).forEach(city=>{ const g=placed[city]; g.ppl.forEach(p=>{ const lat=g.co[0]+_jit(p.id+"a",0.09),lng=g.co[1]+_jit(p.id+"b",0.13); bounds.push([lat,lng]);
+  Object.keys(placed).forEach(city=>{ const g=placed[city]; g.ppl.forEach(p=>{ const lat=(p.home_lat!=null)?p.home_lat:g.co[0]+_jit(p.id+"a",0.09), lng=(p.home_lng!=null)?p.home_lng:g.co[1]+_jit(p.id+"b",0.13); bounds.push([lat,lng]);
     const face=p.photo?`<div class="ap-face" style="background-image:url('${p.photo}')"></div>`:`<div class="ap-face">${_atlasInitials(p.name)}</div>`;
     const mk=L.marker([lat,lng],{icon:L.divIcon({className:"atlas-pin",html:face,iconSize:[36,36],iconAnchor:[18,18]}),title:p.name});
     mk.bindTooltip(`${p.name} · ${city}`,{direction:"top",offset:[0,-14]});
     mk.on("click",()=>{ if(typeof showCard==="function")showCard(p); });
     layer.addLayer(mk); }); });
+  const _plF=new Set(); Object.keys(placed).forEach(cn=>placed[cn].ppl.forEach(pp=>_plF.add(pp.id)));
+  PEOPLE.forEach(p=>{ if(p.home_lat==null||p.home_lng==null||_plF.has(p.id))return;
+    bounds.push([p.home_lat,p.home_lng]);
+    const face=p.photo?`<div class="ap-face" style="background-image:url('${p.photo}')"></div>`:`<div class="ap-face">${_atlasInitials(p.name)}</div>`;
+    const mk=L.marker([p.home_lat,p.home_lng],{icon:L.divIcon({className:"atlas-pin",html:face,iconSize:[36,36],iconAnchor:[18,18]}),title:p.name});
+    mk.bindTooltip(p.name,{direction:"top",offset:[0,-14]});
+    mk.on("click",()=>{ if(typeof showCard==="function")showCard(p); });
+    layer.addLayer(mk); });
   map.addLayer(layer);
   setTimeout(()=>{ try{ map.invalidateSize(); if(bounds.length>1)map.fitBounds(bounds,{padding:[60,60],maxZoom:6}); else if(bounds.length===1)map.setView(bounds[0],5); }catch(_){ } },170);
   _atlasExtraCard(unplaced);
@@ -911,11 +936,17 @@ function _atlasRefreshMarkers(map){
   Object.keys(placed).forEach(city=>{ const g=placed[city];
     const cEl=document.createElement("div"); cEl.className="ap-cluster"; cEl.style.cursor="pointer"; cEl.textContent=g.ppl.length;
     cityMs.push(new maplibregl.Marker({element:cEl}).setLngLat([g.co[1],g.co[0]]).setPopup(new maplibregl.Popup({offset:20,closeButton:false}).setHTML(_cityPopupHTML(city,g.ppl))).addTo(map));
-    g.ppl.forEach(p=>{ const lat=g.co[0]+_jit(p.id+"a",0.09),lng=g.co[1]+_jit(p.id+"b",0.13);
+    g.ppl.forEach(p=>{ const lat=(p.home_lat!=null)?p.home_lat:g.co[0]+_jit(p.id+"a",0.09), lng=(p.home_lng!=null)?p.home_lng:g.co[1]+_jit(p.id+"b",0.13);
       const w=document.createElement("div"); w.className="atlas-pin"; w.style.cursor="pointer"; w.title=`${p.name} · ${city}`;
       w.innerHTML=p.photo?`<div class="ap-face" style="background-image:url('${p.photo}')"></div>`:`<div class="ap-face">${_atlasInitials(p.name)}</div>`;
       w.addEventListener("click",()=>{ if(typeof showCard==="function")showCard(p); });
       personMs.push(new maplibregl.Marker({element:w}).setLngLat([lng,lat]).addTo(map)); }); });
+  const _pl=new Set(); Object.keys(placed).forEach(cn=>placed[cn].ppl.forEach(pp=>_pl.add(pp.id)));
+  PEOPLE.forEach(p=>{ if(p.home_lat==null||p.home_lng==null||_pl.has(p.id))return;
+    const w=document.createElement("div"); w.className="atlas-pin"; w.style.cursor="pointer"; w.title=p.name;
+    w.innerHTML=p.photo?`<div class="ap-face" style="background-image:url('${p.photo}')"></div>`:`<div class="ap-face">${_atlasInitials(p.name)}</div>`;
+    w.addEventListener("click",()=>{ if(typeof showCard==="function")showCard(p); });
+    personMs.push(new maplibregl.Marker({element:w}).setLngLat([p.home_lng,p.home_lat]).addTo(map)); });
   map._cityMs=cityMs; map._personMs=personMs;
   if(typeof maplibregl!=="undefined"&&map.setPaintProperty) _atlasArcsSoon(map);
   if(map._syncFn){ try{ map.off("zoom",map._syncFn); }catch(_){ } }
@@ -1165,7 +1196,7 @@ async function liveRefresh(){
         childrenNotes:c.children_notes, pets:c.pets, dietary:c.dietary, tags:[],
         phone:c.phone, email:c.email, location:c.address,
         school:c.school, schoolYear:c.school_year, classKid:c.class_kid,
-        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion, residence:c.residence, last_contact:c.last_contact, is_female:c.is_female, allergies:c.allergies, values_notes:c.values_notes, cadence_days:c.cadence_days };
+        country:c.country, country2:c.country2, country3:c.country3, religion:c.religion, residence:c.residence, last_contact:c.last_contact, is_female:c.is_female, allergies:c.allergies, values_notes:c.values_notes, cadence_days:c.cadence_days, address:c.address, home_lat:c.home_lat, home_lng:c.home_lng };
     });
     const byId=Object.fromEntries(fresh.map(p=>[p.id,p]));
     for(const p of fresh){ if(p.partnerId&&byId[p.partnerId]){ const q=byId[p.partnerId]; const best=Math.min(p.closeness.tier,q.closeness.tier); const lbl=p.closeness.tier===best?p.closeness.label:q.closeness.label; p.closeness=q.closeness={tier:best,label:lbl}; } }
@@ -1268,8 +1299,66 @@ async function loadGifts(who){
   }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load keepsakes.</span>`; console.warn(e); }
 }
 
+/* ── Home on the earth: exact address, navigation, reachable souls ── */
+async function _editAddress(person){
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:430px;max-width:94vw"><div class="picker-head"><h3>🏡 Address — ${esc(person.name)}</h3>
+    <input id="ad-in" type="text" placeholder="Begin typing the address… (street, city)" value="${esc(person.address||"")}" style="${_IN}" autocomplete="off">
+    <div id="ad-list" style="max-height:230px;overflow-y:auto;margin-top:8px"></div></div>
+    <div class="picker-foot"><button class="tab" id="ad-clear">Clear</button> <button class="tab" id="ad-x">Cancel</button></div></div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector("#ad-in"), list=ov.querySelector("#ad-list"); let tmr=null;
+  const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov)close(); });
+  ov.querySelector("#ad-x").addEventListener("click",close);
+  ov.querySelector("#ad-clear").addEventListener("click",async()=>{ close();
+    try{ await sbPatch("contacts","id",person.id,{address:null,home_lat:null,home_lng:null}); person.address=null; person.home_lat=null; person.home_lng=null; toast("Address cleared"); if(currentPerson&&currentPerson.id===person.id)showCard(person); }catch(e){ toast("Couldn’t save",true); } });
+  function lbl(f){ const p=f.properties||{}; const street=p.housenumber?(p.housenumber+" "+(p.street||"")).trim():(p.street||"");
+    return [p.name,street,p.district,p.city||p.town||p.village,p.state,p.country].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(", "); }
+  async function search(q){ if(!q||q.length<3){ list.innerHTML=""; return; }
+    try{ const r=await fetch("https://photon.komoot.io/api/?q="+encodeURIComponent(q)+"&limit=6&lang=en"); const j=await r.json();
+      list.innerHTML=(j.features||[]).map((f,i)=>`<div class="picker-item" data-i="${i}" style="align-items:flex-start"><span class="pi-dot" style="background:#C9A24A;margin-top:6px;flex-shrink:0"></span><span style="font-size:13px;line-height:1.45">${esc(lbl(f))}</span></div>`).join("")||`<div style="padding:12px;color:var(--muted);font-size:12px">No places found — keep typing.</div>`;
+      list.querySelectorAll(".picker-item").forEach(el=>el.addEventListener("click",async()=>{ const f=j.features[+el.dataset.i]; const c=f.geometry.coordinates; const addr=lbl(f); close();
+        const _pp=f.properties||{}; const _city=_pp.city||_pp.town||_pp.village||null;
+        const _body={address:addr,home_lat:c[1],home_lng:c[0]};
+        if(_city&&(!person.residence||!_cityish(person.residence))){ _body.residence=_city; }
+        try{ await sbPatch("contacts","id",person.id,_body); person.address=addr; person.home_lat=c[1]; person.home_lng=c[0]; if(_body.residence)person.residence=_body.residence; toast("Home marked upon the earth ✦"+(_body.residence?" · "+_body.residence:"")); if(currentPerson&&currentPerson.id===person.id)showCard(person); }
+        catch(e){ toast("Couldn’t save — has 06_home.sql been run?",true); console.warn(e); } }));
+    }catch(e){ list.innerHTML=`<div style="padding:12px;color:var(--muted);font-size:12px">The gazetteer is unreachable just now.</div>`; } }
+  inp.addEventListener("input",()=>{ clearTimeout(tmr); tmr=setTimeout(()=>search(inp.value.trim()),350); });
+  inp.focus();
+}
+function _addrActions(person){
+  const lat=person.home_lat, lng=person.home_lng, has=(lat!=null&&lng!=null);
+  const g=has?`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`:`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(person.address||"")}`;
+  const ap=has?`https://maps.apple.com/?daddr=${lat},${lng}`:`https://maps.apple.com/?q=${encodeURIComponent(person.address||"")}`;
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:400px;max-width:94vw"><div class="picker-head"><h3>🏡 ${esc(person.address||"Address")}</h3></div>
+    <div style="display:flex;flex-direction:column;gap:8px;padding:12px 2px">
+      ${has?`<button class="tab" data-fly="1" style="padding:13px;text-align:left;font-size:14px">🌍 &nbsp;Fly there — the Atlas</button>`:""}
+      <a class="tab" style="padding:13px;text-align:left;font-size:14px;display:block;text-decoration:none" href="${g}" target="_blank" rel="noopener">🧭 &nbsp;Google Maps — directions</a>
+      <a class="tab" style="padding:13px;text-align:left;font-size:14px;display:block;text-decoration:none" href="${ap}" target="_blank" rel="noopener">🍎 &nbsp;Apple Maps — directions</a>
+    </div><div class="picker-foot"><button class="tab" id="aa-x">Close</button></div></div>`;
+  document.body.appendChild(ov); const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov)close(); });
+  ov.querySelector("#aa-x").addEventListener("click",close);
+  const fb=ov.querySelector("[data-fly]"); if(fb)fb.addEventListener("click",()=>{ close(); atlasFly(lat,lng,person.name); });
+}
+function _phoneActions(num){
+  const digits=String(num).replace(/[^\d+]/g,""); const wa=digits.replace(/^\+/,"");
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:360px;max-width:94vw"><div class="picker-head"><h3>📞 ${esc(num)}</h3></div>
+    <div style="display:flex;flex-direction:column;gap:8px;padding:12px 2px">
+      <a class="tab" style="padding:13px;display:block;text-align:left;font-size:14px;text-decoration:none" href="tel:${digits}">📞 &nbsp;Call</a>
+      <a class="tab" style="padding:13px;display:block;text-align:left;font-size:14px;text-decoration:none" href="sms:${digits}">💬 &nbsp;Message (SMS)</a>
+      <a class="tab" style="padding:13px;display:block;text-align:left;font-size:14px;text-decoration:none" href="https://wa.me/${wa}" target="_blank" rel="noopener">🟢 &nbsp;WhatsApp</a>
+    </div><div class="picker-foot"><button class="tab" id="pa-x">Close</button></div></div>`;
+  document.body.appendChild(ov); const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov)close(); });
+  ov.querySelector("#pa-x").addEventListener("click",close);
+}
 async function editResidence(p){
-  const present=[...new Set(PEOPLE.map(x=>(x.residence||"").trim()).filter(Boolean))];
+  const present=[...new Set(PEOPLE.map(x=>(x.residence||"").trim()).filter(Boolean))].filter(_cityish);
   const all=[...new Set([...HZ_CANON.map(c=>c.key),...present])];
   const ov=document.createElement("div"); ov.className="picker-overlay";
   const chips=all.map(c=>`<button class="tab" data-city="${esc(c)}" style="margin:3px 4px 0 0${p.residence===c?';border-color:var(--accent);color:var(--accent)':''}">${hzMeta(c).glyph} ${esc(c)}</button>`).join("");
@@ -1308,8 +1397,8 @@ function showCard(p){
     ${statusRow("Class with our kid",p.classKid,"color_mm3vqpx1","classKid")}
     ${(p.is_female||p.maidenName)?`<div style="margin-top:4px">👰 <strong>Maiden name:</strong> ${p.maidenName?p.maidenName:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-col="text_mm4rgpf" data-label="Maiden name" data-multi="0">✎</span></div>`:""}
     <div style="margin-top:4px"><strong>Age:</strong> ${ageOf(p)!=null?`${ageOf(p)}${p.birthday?` <span style="color:var(--muted);font-size:11px">· from birthday</span>`:""}`:`<span style="color:var(--muted)">—</span>`}${p.birthday?"":` <span class="edit-link" data-num="numeric_mm3wz3fb" data-label="Age">✎</span>`}</div>
-    <div style="margin-top:4px">📞 ${p.phone?p.phone:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="phone" data-label="Phone">✎</span></div>
-    <div style="margin-top:4px">✉ ${p.email?p.email:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="email" data-label="Email">✎</span></div>
+    <div style="margin-top:4px">📞 ${p.phone?`<span data-phone="${esc(p.phone)}" style="cursor:pointer;border-bottom:1px dotted rgba(199,162,74,.5)">${esc(p.phone)}</span>`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="phone" data-label="Phone">✎</span></div>
+    <div style="margin-top:4px">✉ ${p.email?`<a href="mailto:${esc(p.email)}" style="color:var(--soft);text-decoration:none;border-bottom:1px dotted rgba(199,162,74,.5)">${esc(p.email)}</a>`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" data-contact="email" data-label="Email">✎</span></div>
     <div style="margin-top:4px">🏠 <strong>Household:</strong> ${p.household?p.household:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-household-btn">✎</span></div>
   </div></div>`;
   const _lcD = p.last_contact? Math.floor((Date.now()-new Date(p.last_contact))/86400000) : null;
@@ -1317,6 +1406,7 @@ function showCard(p){
   const _pen = (_lcD!=null && _lcD>(p.cadence_days||180));
   const houseHTML=`<div class="info-section"><h3>📍 Of the House</h3><div style="font-size:13px;line-height:1.7">
     <div>📍 <strong>Residence:</strong> ${p.residence?`<span data-gores="${String(p.residence).replace(/"/g,'&quot;')}" style="cursor:pointer;border-bottom:1px dotted rgba(199,162,76,.6)">${p.residence}</span>`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-residence-btn">✎</span></div>
+    <div style="margin-top:4px">🏡 <strong>Address:</strong> ${p.address?`<span data-addr="1" style="cursor:pointer;border-bottom:1px dotted rgba(199,162,74,.6)">${esc(p.address)}</span>`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-address-btn">✎</span></div>
     <div style="margin-top:4px">🌒 <strong>Last heard from:</strong> ${p.last_contact?`${fmtDate(p.last_contact)} <span style="color:${_pen?'#C8945B':'var(--muted)'}">· ${_penM} ${_penM===1?'month':'months'} ago${_pen?' · in penumbra':''}</span>`:`<span style="color:var(--muted)">no correspondence recorded yet</span>`} <span class="edit-link" id="edit-lastcontact-btn">✎</span></div>
     <div style="margin-top:4px">⚠ <strong>Allergies &amp; care:</strong> ${p.allergies?p.allergies:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-allergies-btn">✎</span></div>
     <div style="margin-top:4px">✦ <strong>Values &amp; traditions:</strong> ${p.values_notes?p.values_notes:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-values-btn">✎</span></div>
@@ -1372,6 +1462,9 @@ function showCard(p){
   const _dr=root.querySelector(".card-drawer"); if(_dr) _dr.classList.toggle("penumbra", _pen);
   root.querySelectorAll("[data-gocircle]").forEach(el=>el.addEventListener("click",ev=>{ if(ev.target.classList&&ev.target.classList.contains("chip-x"))return; closeCard(); gotoCircle(el.dataset.gocircle); }));
   root.querySelectorAll("[data-gores]").forEach(el=>el.addEventListener("click",()=>{ closeCard(); gotoTab("horizons"); }));
+  const eab=document.getElementById("edit-address-btn"); if(eab)eab.addEventListener("click",()=>_editAddress(p));
+  root.querySelectorAll("[data-addr]").forEach(el=>el.addEventListener("click",()=>_addrActions(p)));
+  root.querySelectorAll("[data-phone]").forEach(el=>el.addEventListener("click",()=>_phoneActions(el.dataset.phone)));
   document.getElementById("card-bd")?.addEventListener("click",closeCard);
   document.getElementById("card-x").addEventListener("click",closeCard);
   root.querySelectorAll("li[data-id]").forEach(li=>li.addEventListener("click",()=>{const t=byId[li.dataset.id];if(t)showCard(t);}));
