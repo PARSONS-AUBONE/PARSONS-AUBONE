@@ -111,6 +111,11 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<style>
+/* Refinement pass — contrast & rhythm (Clay/Mesh research 2026-07) */
+:root{ --soft:#E6E0D0; --muted:rgba(240,234,220,.6); }
+#journal-feed{ font-size:15.5px !important; line-height:1.62; }
+</style>
 </head>
 <body>
 <div class="cinema" aria-hidden="true"><div class="pl on" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Dunluce_Castle_and_Beach_%2819682178030%29.jpg/1920px-Dunluce_Castle_and_Beach_%2819682178030%29.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/M%C3%BCnchen-Altstadt_Residenz_Antiquarium_254.jpg/1920px-M%C3%BCnchen-Altstadt_Residenz_Antiquarium_254.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Campeonato_Argentino_de_Polo_2010_-_5237109478_e7ed034169_o.jpg/1920px-Campeonato_Argentino_de_Polo_2010_-_5237109478_e7ed034169_o.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Flinders_St_Station_at_night.jpg/1920px-Flinders_St_Station_at_night.jpg')"></div><div class="pl" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/High_Cross_and_O%27Rourke%27s_Tower.jpg/1920px-High_Cross_and_O%27Rourke%27s_Tower.jpg')"></div></div>
@@ -129,6 +134,7 @@
       <div class="tab" data-tab="today">Today</div>
       <div class="tab" data-tab="journal">The Journal</div>
       <div class="tab" data-tab="atlas">The Atlas</div>
+      <div class="tab" data-tab="album">The Album</div>
       <div class="tab" data-tab="calendar">Birthdays</div>
       <div class="tab" data-tab="anniversaries">Anniversaries</div>
       <div class="tab" data-tab="health">The Roll</div>
@@ -410,6 +416,207 @@ function renderGeography(){
     </div><div class="grid">${html}</div>`;
 }
 
+const _quillAfter=()=>{ try{ if(typeof TABS!=="undefined"&&TABS[activeTab])TABS[activeTab](); }catch(_){ } };
+
+/* ══ THE QUILL · ß — the universal composer of the House ══ */
+const QUILL_TYPES=[
+ {slug:"milestone",label:"Milestone",glyph:"✦",kind:"interaction",alias:"hito evento"},
+ {slug:"log",label:"Bitácora / Log",glyph:"🕯",kind:"interaction",alias:"bitacora historia diario"},
+ {slug:"call",label:"Call",glyph:"📞",kind:"interaction",alias:"llamada llamado telefono"},
+ {slug:"visit",label:"Visit",glyph:"☕",kind:"interaction",alias:"visita cafe encuentro cena almuerzo asado"},
+ {slug:"message",label:"Message",glyph:"✉️",kind:"interaction",alias:"mensaje whatsapp mail correo"},
+ {slug:"letter",label:"Note / Letter",glyph:"✍️",kind:"interaction",alias:"nota carta"},
+ {slug:"gathering",label:"Gathering",glyph:"🎉",kind:"interaction",alias:"reunion fiesta festejo"},
+ {slug:"gift",label:"Gift / Keepsake",glyph:"🎁",kind:"gift",alias:"regalo obsequio"},
+ {slug:"birth",label:"Birthday",glyph:"🎂",kind:"sacred",needsDate:true,alias:"cumpleanos cumple nacimiento hijo nacio"},
+ {slug:"baptism",label:"Baptism",glyph:"🕊",kind:"sacred",needsDate:true,alias:"bautismo bautizo"},
+ {slug:"communion",label:"First Communion",glyph:"✝",kind:"sacred",needsDate:true,alias:"comunion"},
+ {slug:"confirmation",label:"Confirmation",glyph:"✝",kind:"sacred",needsDate:true,alias:"confirmacion"},
+ {slug:"marriage",label:"Marriage",glyph:"💍",kind:"sacred",needsDate:true,alias:"casamiento boda matrimonio aniversario"},
+ {slug:"death",label:"Passing",glyph:"🕯",kind:"sacred",needsDate:true,alias:"fallecimiento muerte"},
+ {slug:"circle",label:"Circle",glyph:"⭐",kind:"circle",alias:"circulo grupo circles"},
+ {slug:"allergy",label:"Allergy",glyph:"⚠",kind:"field",field:"allergies",alias:"alergia alergias"},
+ {slug:"value",label:"Values / Tradition",glyph:"✦",kind:"field",field:"values_notes",alias:"valores tradicion"},
+ {slug:"residence",label:"Residence",glyph:"📍",kind:"field",field:"residence",alias:"residencia ciudad vive casa"}
+];
+function quillTypes(){ let cus=[]; try{ cus=JSON.parse(localStorage.getItem("quill_types")||"[]"); }catch(_){ } return QUILL_TYPES.concat(cus); }
+function _qNorm(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim(); }
+function parseNLDate(s){
+  if(!s) return null; s=_qNorm(s);
+  const t=new Date(); const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  function nm(y,mo,d){ mo=+mo; d=+d; y=+y; if(!y||mo<1||mo>12||d<1||d>31)return null; return `${y}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`; }
+  if(/^(hoy|today)$/.test(s)) return iso(t);
+  if(/^(ayer|yesterday)$/.test(s)){ const d=new Date(t); d.setDate(d.getDate()-1); return iso(d); }
+  if(/^(manana|tomorrow)$/.test(s)){ const d=new Date(t); d.setDate(d.getDate()+1); return iso(d); }
+  let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if(m) return nm(m[1],m[2],m[3]);
+  m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/); if(m){ let y=+m[3]; if(y<100)y+=(y>40?1900:2000); return nm(y,m[2],m[1]); }
+  m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})$/); if(m) return nm(t.getFullYear(),m[2],m[1]);
+  const MON={ene:1,enero:1,jan:1,january:1,feb:2,febrero:2,february:2,mar:3,marzo:3,march:3,abr:4,abril:4,apr:4,april:4,may:5,mayo:5,jun:6,junio:6,june:6,jul:7,julio:7,july:7,ago:8,agosto:8,aug:8,august:8,sep:9,sept:9,septiembre:9,september:9,oct:10,octubre:10,october:10,nov:11,noviembre:11,november:11,dic:12,diciembre:12,dec:12,december:12};
+  m=s.match(/^(\d{1,2})\s*(?:de\s+)?([a-z]+)\.?\s*(?:de\s+|del\s+)?(\d{4})?$/); if(m&&MON[m[2]]) return nm(m[3]||t.getFullYear(),MON[m[2]],m[1]);
+  m=s.match(/^([a-z]+)\.?\s+(\d{1,2})(?:,?\s*(\d{4}))?$/); if(m&&MON[m[1]]) return nm(m[3]||t.getFullYear(),MON[m[1]],m[2]);
+  return null;
+}
+async function createSoul(name){
+  const id=Date.now();
+  await sbInsert("contacts",[{id,name}]);
+  const p={id,name,circleIds:[],parentIds:[],partnerId:null,residence:null,last_contact:null,cadence_days:null,allergies:null,values_notes:null,photo:null,household:null,
+    circle:(typeof FALLBACK!=="undefined")?FALLBACK:{id:"__none__",label:"Wider Circle",colour:"#5a6270"},
+    closeness:{tier:150,label:"Extended"}};
+  PEOPLE.push(p); toast(`${name} joins the House ✦`); return p;
+}
+async function _quillUpload(file){
+  const ext=(file.type&&file.type.indexOf("png")>=0)?"png":"jpg";
+  const path=`moments/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+  const r=await fetch(`${SUPA.url}/storage/v1/object/photos/${path}`,{method:"POST",headers:{apikey:SUPA.key,Authorization:"Bearer "+((typeof AUTH_TOKEN!=="undefined"&&AUTH_TOKEN)||SUPA.key),"Content-Type":file.type||"image/jpeg","x-upsert":"true"},body:file});
+  if(!r.ok) throw new Error("upload "+r.status);
+  return `${SUPA.url}/storage/v1/object/public/photos/${path}`;
+}
+let _qs={type:QUILL_TYPES[0],log:false,photoFile:null};
+(function(){
+  if(window.__quillInstalled)return; window.__quillInstalled=true;
+  const ov=document.createElement("div"); ov.id="quill";
+  ov.style.cssText="position:fixed;inset:0;z-index:9500;display:none;align-items:flex-start;justify-content:center;background:rgba(6,7,5,.62);backdrop-filter:blur(7px)";
+  ov.innerHTML=`<div id="q-sheet" style="position:relative;margin-top:9vh;width:min(680px,94vw);background:rgba(17,19,14,.98);border:1px solid rgba(242,236,221,.15);border-radius:18px;box-shadow:0 34px 100px rgba(0,0,0,.65)">
+    <div style="display:flex;align-items:center;gap:10px;padding:15px 20px 0">
+      <span style="font-size:17px">✒️</span><span style="font-family:'Cinzel',serif;font-size:13px;letter-spacing:.14em;color:#C7A24C">THE QUILL</span>
+      <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8b8676">#type · @soul · ß · esc</span>
+    </div>
+    <div style="padding:6px 20px 0"><span id="q-typechip" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-family:'Manrope',sans-serif;font-size:12px;font-weight:600;color:#E3C786;background:rgba(199,162,76,.12);border:1px solid rgba(199,162,76,.4);border-radius:9px;padding:4px 10px"></span>
+      <span id="q-logbadge" style="display:none;margin-left:8px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#C8945B;border:1px solid rgba(200,148,91,.5);border-radius:8px;padding:3px 8px">🕯 BITÁCORA — sin @ queda como historia de la Casa</span></div>
+    <div style="position:relative;padding:8px 20px 0">
+      <div id="q-ed" contenteditable="true" spellcheck="false" style="min-height:66px;outline:none;font-family:'EB Garamond',serif;font-size:17.5px;line-height:1.65;color:#EFE9D8;padding:4px 0 10px;border-bottom:1px solid rgba(242,236,221,.12)"></div>
+      <div id="q-ph" style="position:absolute;top:12px;left:20px;color:#8b8676;font-family:'EB Garamond',serif;font-size:17px;pointer-events:none">Escribí lo que pasó… <b style="color:#C7A24C">#</b> tipo · <b style="color:#C7A24C">@</b> persona · <b style="color:#C7A24C">ß</b>DATE bitácora</div>
+      <div id="q-ac" style="display:none;position:absolute;left:20px;top:76px;z-index:70;background:rgba(20,22,16,.99);border:1px solid rgba(242,236,221,.16);border-radius:11px;box-shadow:0 16px 50px rgba(0,0,0,.6);max-height:250px;overflow-y:auto;min-width:280px"></div>
+    </div>
+    <div id="q-photoprev" style="display:none;padding:10px 20px 0"></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 20px 16px;flex-wrap:wrap">
+      <button id="q-photo" title="Attach a photograph" style="background:none;border:1px solid rgba(242,236,221,.16);color:#CFC9B8;border-radius:9px;padding:7px 11px;cursor:pointer;font-size:13px">📷</button>
+      <input id="q-file" type="file" accept="image/*" style="display:none">
+      <input id="q-date" type="text" placeholder="hoy · 25 dic 2025 · 12/03/1980" style="flex:1;min-width:150px;background:transparent;border:1px solid rgba(242,236,221,.16);border-radius:9px;color:#CFC9B8;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 10px;outline:none">
+      <span id="q-dateok" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8b8676;min-width:86px"></span>
+      <button id="q-save" style="background:rgba(199,162,76,.14);border:1px solid #C7A24C;color:#E3C786;font-family:'Manrope',sans-serif;font-weight:700;font-size:13px;border-radius:10px;padding:9px 18px;cursor:pointer">Inscribe ✦</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  const ed=ov.querySelector("#q-ed"), ac=ov.querySelector("#q-ac"), ph=ov.querySelector("#q-ph"), dateEl=ov.querySelector("#q-date"), dateOk=ov.querySelector("#q-dateok"), fileEl=ov.querySelector("#q-file"), prev=ov.querySelector("#q-photoprev");
+  let items=[], sel=0, menuMode=null;
+  function chipTxt(){ const t=_qs.type; ov.querySelector("#q-typechip").innerHTML=`${t.glyph} ${t.label} <span style="opacity:.55">▾</span>`; }
+  function badge(){ ov.querySelector("#q-logbadge").style.display=_qs.log?"inline-block":"none"; }
+  function showPh(){ ph.style.display=(ed.textContent.trim()||ed.querySelector(".qchip"))?"none":"block"; }
+  function closeAc(){ ac.style.display="none"; items=[]; menuMode=null; }
+  function paint(){ ac.querySelectorAll(".q-opt").forEach((o,i)=>o.style.background=i===sel?"rgba(242,236,221,.09)":""); const c=ac.querySelector(`.q-opt[data-i="${sel}"]`); if(c)c.scrollIntoView({block:"nearest"}); }
+  function _qTok(){ const s=window.getSelection(); if(!s.rangeCount)return null; const r=s.getRangeAt(0); const n=r.startContainer; if(!ed.contains(n)||n.nodeType!==3)return null; const t=n.textContent.slice(0,r.startOffset);
+    let m=t.match(/(?:^|\s)#([^\s#@ß]{0,30})$/u); if(m)return{trig:"#",q:m[1],node:n,at:r.startOffset-m[1].length-1,end:r.startOffset};
+    m=t.match(/(?:^|\s)@([\p{L}\-'’ ]{0,34})$/u); if(m)return{trig:"@",q:m[1],node:n,at:r.startOffset-m[1].length-1,end:r.startOffset};
+    m=t.match(/ß(DATE|date)?$/); if(m)return{trig:"ß",q:m[1]||"",node:n,at:r.startOffset-m[0].length,end:r.startOffset};
+    return null; }
+  function consume(tok){ try{ const r=document.createRange(); r.setStart(tok.node,tok.at); r.setEnd(tok.node,tok.end); r.deleteContents(); }catch(_){ } }
+  function insertChip(p){ const s=window.getSelection(); const chip=document.createElement("span"); chip.className="qchip"; chip.contentEditable="false"; chip.dataset.mid=p.id; chip.textContent="@"+p.name; chip.style.cssText="color:#E3C786;font-weight:600;background:rgba(199,162,76,.14);border-radius:6px;padding:0 5px"; const r=s.getRangeAt(0); r.insertNode(chip); const sp=document.createTextNode(" "); chip.after(sp); const nr=document.createRange(); nr.setStartAfter(sp); nr.collapse(true); s.removeAllRanges(); s.addRange(nr); showPh(); }
+  function openMenu(mode,q){
+    menuMode=mode; const nq=_qNorm(q);
+    if(mode==="type"){ const all=quillTypes(); items=all.filter(t=>!nq||_qNorm(t.label).includes(nq)||_qNorm(t.alias||"").includes(nq)||t.slug.includes(nq)).slice(0,9).map(t=>({t,kind:"type"}));
+      if(nq&&!all.some(t=>_qNorm(t.label)===nq)) items.push({kind:"newtype",name:q.trim()}); }
+    else if(mode==="person"){ items=PEOPLE.filter(p=>{ const n=_qNorm(p.name); return !nq||n.includes(nq)||n.split(/\s+/).some(w=>w.startsWith(nq.split(/\s+/)[0]||"")); }).slice(0,8).map(p=>({p,kind:"person"}));
+      if(nq.length>1) items.push({kind:"newperson",name:q.trim()}); }
+    else { items=[{kind:"tok",tok:"date",label:"📅 Date — escribila y la interpreto"},{kind:"tok",tok:"person",label:"👤 Person (@)"},{kind:"tok",tok:"type",label:"🏷 Entry type (#)"},{kind:"tok",tok:"photo",label:"📷 Photograph"}]; }
+    if(!items.length){ closeAc(); return; }
+    sel=0;
+    ac.innerHTML=items.map((it,i)=>{ let h="";
+      if(it.kind==="type") h=`${it.t.glyph} <b>${esc(it.t.label)}</b>${it.t.needsDate?' <span style="color:#8b8676;font-size:11px">· needs a date</span>':""}`;
+      else if(it.kind==="newtype") h=`＋ Create entry type “<b>${esc(it.name)}</b>”`;
+      else if(it.kind==="person") h=`👤 ${esc(it.p.name)}${it.p.household?` <span style="color:#8b8676;font-size:11px">· ${esc(it.p.household)}</span>`:""}`;
+      else if(it.kind==="newperson") h=`＋ Add “<b>${esc(it.name)}</b>” to the House`;
+      else h=it.label;
+      return `<div class="q-opt" data-i="${i}" style="padding:9px 13px;cursor:pointer;font-family:'EB Garamond',serif;font-size:15px;color:#E9E3D3">${h}</div>`; }).join("");
+    ac.style.display="block"; paint();
+    ac.querySelectorAll(".q-opt").forEach(o=>{ o.addEventListener("mousedown",e=>{ e.preventDefault(); pick(+o.dataset.i); }); o.addEventListener("mouseover",()=>{ sel=+o.dataset.i; paint(); }); });
+  }
+  async function pick(i){ const it=items[i]; if(!it)return; const tok=_qTok();
+    if(it.kind==="type"){ if(tok)consume(tok); _qs.type=it.t; chipTxt(); closeAc(); showPh(); if(it.t.needsDate)dateEl.focus(); return; }
+    if(it.kind==="newtype"){ if(tok)consume(tok); const nt={slug:"c_"+_qNorm(it.name).replace(/\s+/g,"_").slice(0,24),label:it.name,glyph:"✧",kind:"interaction",alias:""}; try{ const cus=JSON.parse(localStorage.getItem("quill_types")||"[]"); cus.push(nt); localStorage.setItem("quill_types",JSON.stringify(cus)); }catch(_){ } _qs.type=nt; chipTxt(); closeAc(); toast(`Entry type “${it.name}” created ✧`); return; }
+    if(it.kind==="person"){ if(tok)consume(tok); insertChip(it.p); closeAc(); return; }
+    if(it.kind==="newperson"){ if(tok)consume(tok); closeAc(); try{ const p=await createSoul(it.name); insertChip(p); }catch(e){ toast("Couldn’t add them",true); console.warn(e); } return; }
+    if(it.kind==="tok"){ if(tok)consume(tok); closeAc();
+      if(it.tok==="date"){ dateEl.focus(); }
+      else if(it.tok==="photo"){ fileEl.click(); }
+      else if(it.tok==="person"){ document.execCommand("insertText",false,"@"); ed.dispatchEvent(new Event("input",{bubbles:true})); }
+      else if(it.tok==="type"){ document.execCommand("insertText",false,"#"); ed.dispatchEvent(new Event("input",{bubbles:true})); }
+      return; }
+  }
+  ed.addEventListener("input",()=>{ showPh(); const tok=_qTok(); if(!tok){ closeAc(); return; }
+    if(tok.trig==="ß"){ if(tok.q==="DATE"){ consume(tok); _qs.log=true; badge(); dateEl.focus(); closeAc(); } else if(tok.q==="date"){ consume(tok); dateEl.focus(); closeAc(); } else openMenu("token",""); return; }
+    if(tok.trig==="#") openMenu("type",tok.q); else openMenu("person",tok.q); });
+  ed.addEventListener("keydown",e=>{
+    if(ac.style.display==="block"&&items.length){ if(e.key==="ArrowDown"){e.preventDefault();sel=Math.min(sel+1,items.length-1);paint();} else if(e.key==="ArrowUp"){e.preventDefault();sel=Math.max(sel-1,0);paint();} else if(e.key==="Enter"||e.key==="Tab"){e.preventDefault();pick(sel);} else if(e.key==="Escape"){e.preventDefault();closeAc();} return; }
+    if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); qSave(); }
+    if(e.key==="Escape"){ e.preventDefault(); closeQuill(); } });
+  ed.addEventListener("blur",()=>setTimeout(closeAc,180));
+  dateEl.addEventListener("input",()=>{ const v=dateEl.value.trim(); if(!v){ dateOk.textContent=""; return; } const d=parseNLDate(v); dateOk.textContent=d?("→ "+fmtDate(d)):"?"; dateOk.style.color=d?"#9fbf8f":"#C97F7F"; });
+  dateEl.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); ed.focus(); } if(e.key==="Escape"){ e.preventDefault(); closeQuill(); } });
+  ov.querySelector("#q-typechip").addEventListener("click",()=>{ ed.focus(); openMenu("type",""); });
+  ov.querySelector("#q-photo").addEventListener("click",()=>fileEl.click());
+  fileEl.addEventListener("change",()=>{ const f=fileEl.files&&fileEl.files[0]; if(!f)return; _qs.photoFile=f; const u=URL.createObjectURL(f); prev.style.display="block"; prev.innerHTML=`<img src="${u}" style="height:64px;border-radius:10px;border:1px solid rgba(242,236,221,.18);vertical-align:middle"> <span id="q-photorm" style="cursor:pointer;color:#C97F7F;font-size:13px;margin-left:8px">✕ quitar</span>`; prev.querySelector("#q-photorm").addEventListener("click",()=>{ _qs.photoFile=null; fileEl.value=""; prev.style.display="none"; prev.innerHTML=""; }); });
+  ov.addEventListener("mousedown",e=>{ if(e.target===ov)closeQuill(); });
+  ov.querySelector("#q-save").addEventListener("click",qSave);
+  window.openQuill=function(){ ov.style.display="flex"; _qs={type:quillTypes()[0],log:false,photoFile:null}; ed.innerHTML=""; dateEl.value=""; dateOk.textContent=""; prev.style.display="none"; prev.innerHTML=""; fileEl.value=""; chipTxt(); badge(); showPh(); closeAc(); setTimeout(()=>ed.focus(),0); };
+  window.closeQuill=function(){ ov.style.display="none"; closeAc(); };
+  function _qSer(withM){ let out=""; ed.childNodes.forEach(n=>{ if(n.nodeType===3)out+=n.textContent; else if(n.classList&&n.classList.contains("qchip")){ if(withM)out+=n.textContent; } else if(n.nodeName==="BR")out+=" "; else out+=(n.textContent||""); }); return out.replace(/ /g," ").replace(/ß(DATE|date)?/g,"").replace(/\s+/g," ").trim(); }
+  async function qSave(){
+    const btn=ov.querySelector("#q-save"); if(btn.disabled)return;
+    const type=_qs.type; const dv=dateEl.value.trim();
+    let on=dv?parseNLDate(dv):_today(); if(dv&&!on){ toast("No entiendo esa fecha — probá “25 dic 2025” o 25/12/2025",true); dateEl.focus(); return; }
+    if(!on)on=_today();
+    const mentions=[...ed.querySelectorAll(".qchip")].map(c=>Number(c.dataset.mid)).filter(Boolean);
+    const full=_qSer(true), bare=_qSer(false);
+    btn.disabled=true;
+    try{
+      if(type.kind==="interaction"){
+        if(!full&&!_qs.photoFile){ toast("Escribí el momento primero",true); btn.disabled=false; return; }
+        let photoUrl=null;
+        if(_qs.photoFile){ try{ photoUrl=await _quillUpload(_qs.photoFile); }catch(e){ toast("La foto no subió — guardo sin ella",true); console.warn(e); } }
+        let rows;
+        const base={channel:type.slug,on_date:on,note:full||null};
+        if(mentions.length) rows=mentions.map(id=>({contact_id:id,...base}));
+        else if(_qs.log||type.slug==="log") rows=[{contact_id:null,...base,channel:"log"}];
+        else { toast("Nombrá un alma con @ — o usá ßDATE para bitácora de la Casa",true); btn.disabled=false; return; }
+        if(photoUrl) rows=rows.map(r=>({...r,photo_url:photoUrl}));
+        try{ await sbInsert("interactions",rows); }
+        catch(e){ if(photoUrl&&String(e).indexOf("photo_url")>=0){ await sbInsert("interactions",rows.map(r=>{ const c={...r}; delete c.photo_url; return c; })); toast("Guardado — corré 04_quill.sql para que las fotos queden unidas",true); } else throw e; }
+        mentions.forEach(id=>{ const p=PEOPLE.find(x=>x.id===id); if(p&&(!p.last_contact||p.last_contact<on))p.last_contact=on; });
+      } else if(type.kind==="gift"){
+        if(!mentions.length){ toast("¿Para quién? Nombralo con @",true); btn.disabled=false; return; }
+        await sbInsert("gifts",mentions.map(id=>({contact_id:id,direction:"given",item:bare||"A keepsake",occasion:null,on_date:on})));
+      } else if(type.kind==="sacred"){
+        if(!mentions.length){ toast("¿De quién es esta fecha? Nombralo con @",true); btn.disabled=false; return; }
+        await sbInsert("important_dates",mentions.map(id=>({contact_id:id,kind:type.slug,on_date:on,label:bare||null})));
+        for(const id of mentions){ const p=PEOPLE.find(x=>x.id===id); if(!p)continue;
+          if(type.slug==="birth"&&!p.birthday){ try{ await sbPatch("contacts","id",id,{birthday:on}); p.birthday=on; }catch(_){ } }
+          if(type.slug==="marriage"&&!p.anniversary){ try{ await sbPatch("contacts","id",id,{anniversary:on}); p.anniversary=on; }catch(_){ } }
+          if(type.slug==="death"){ try{ await sbPatch("contacts","id",id,{is_deceased:true}); }catch(_){ } } }
+      } else if(type.kind==="circle"){
+        if(!mentions.length){ toast("¿A quién sumo al círculo? Usá @",true); btn.disabled=false; return; }
+        const nm=bare; if(!nm){ toast("Escribí el nombre del círculo",true); btn.disabled=false; return; }
+        let def=(typeof CIRCLE_DEFS!=="undefined"?CIRCLE_DEFS:[]).find(c=>_qNorm(c.label)===_qNorm(nm));
+        if(!def&&typeof createCircle==="function") def=await createCircle(nm);
+        if(!def){ toast("No pude crear el círculo",true); btn.disabled=false; return; }
+        for(const id of mentions){ if(typeof addCircleToContact==="function") await addCircleToContact(id,def.id); }
+      } else if(type.kind==="field"){
+        if(!mentions.length){ toast("¿De quién? Nombralo con @",true); btn.disabled=false; return; }
+        if(!bare){ toast("Escribí el dato después del tipo",true); btn.disabled=false; return; }
+        for(const id of mentions){ await sbPatch("contacts","id",id,{[type.field]:bare}); const p=PEOPLE.find(x=>x.id===id); if(p)p[type.field]=bare; }
+      }
+      toast("Inscripto en la crónica ✦"); closeQuill();
+      try{ if(typeof _quillAfter==="function")_quillAfter(); }catch(_){ }
+    }catch(e){ toast("No se pudo inscribir",true); console.warn(e); }
+    finally{ btn.disabled=false; }
+  }
+  document.addEventListener("keydown",e=>{ if(e.key==="ß"){ const t=e.target; const typing=t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.isContentEditable); if(!typing){ e.preventDefault(); openQuill(); } } });
+  const fab=document.createElement("div"); fab.id="quill-fab"; fab.textContent="✒️"; fab.title="The Quill (ß)";
+  fab.style.cssText="position:fixed;right:18px;bottom:"+(document.getElementById("mode-toggle")?"178px":"20px")+";z-index:48;background:rgba(12,13,10,.85);backdrop-filter:blur(10px);border:1px solid rgba(199,162,76,.55);color:#E3C786;font-size:17px;padding:10px 13px;border-radius:12px;cursor:pointer;box-shadow:0 8px 30px rgba(0,0,0,.5)";
+  fab.addEventListener("click",()=>openQuill());
+  document.body.appendChild(fab);
+})();
+
 function _hlMentions(note){ let out=esc(note); [...PEOPLE].sort((a,b)=>(b.name||"").length-(a.name||"").length).forEach(p=>{ if(!p.name)return; const tag=esc("@"+p.name); if(out.indexOf(tag)>=0){ out=out.split(tag).join(`<span class="row-link" data-pid="${p.id}" style="color:var(--accent);font-weight:600">@${esc(p.name)}</span>`); } }); return out; }
 function _wireComposer(){
   const inp=document.getElementById("jc-input"), ac=document.getElementById("jc-ac"), ph=document.getElementById("jc-ph"), dateEl=document.getElementById("jc-date"), saveBtn=document.getElementById("jc-save");
@@ -432,17 +639,22 @@ function _wireComposer(){
 
 async function renderJournal(){
   const C=document.getElementById("content");
-  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Journal</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the living chronicle of the House, gathered through time</div></div><div class="card wide" style="margin-bottom:14px"><div style="display:flex;gap:12px;align-items:flex-start"><span style="font-size:20px;color:var(--accent);margin-top:3px">✒️</span><div style="flex:1;position:relative"><div id="jc-input" contenteditable="true" style="min-height:26px;outline:none;font-family:'EB Garamond',serif;font-size:16px;line-height:1.6;color:var(--soft);border-bottom:1px solid var(--line);padding:4px 0 8px"></div><div id="jc-ph" style="position:absolute;top:4px;left:0;color:var(--muted);font-family:'EB Garamond',serif;font-size:16px;pointer-events:none">Inscribe a milestone… type <b style="color:var(--accent)">@</b> to name a soul</div><div id="jc-ac" style="display:none;position:absolute;left:0;top:40px;z-index:60;background:rgba(18,20,15,.98);border:1px solid var(--line-2,rgba(242,236,221,.14));border-radius:10px;box-shadow:0 14px 44px rgba(0,0,0,.55);max-height:230px;overflow-y:auto;min-width:240px"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><input id="jc-date" type="date" style="background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:12px;padding:5px 9px;font-family:var(--f-data)"><button id="jc-save" class="tab" style="border:1px solid var(--accent);color:var(--accent)">Inscribe ✦</button></div></div></div></div><div id="journal-feed" class="card wide" style="font-family:'EB Garamond',serif;font-size:14px"><div style="color:var(--muted);padding:8px">Gathering the chronicle…</div></div>`;
-  _wireComposer();
+  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Journal</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the living chronicle of the House, gathered through time</div></div><div class="card wide" id="quill-trigger" style="margin-bottom:14px;cursor:text"><span style="font-size:18px;color:var(--accent)">✒️</span> <span style="font-family:'EB Garamond',serif;font-size:16.5px;color:var(--muted)">Inscribe in the chronicle… <b style="color:var(--accent)">#</b> type · <b style="color:var(--accent)">@</b> souls · <b style="color:var(--accent)">ß</b> anywhere · <b style="color:var(--accent)">📷</b> photos</span></div><div id="journal-feed" class="card wide" style="font-family:'EB Garamond',serif;font-size:14px"><div style="color:var(--muted);padding:8px">Gathering the chronicle…</div></div>`;
+  const _qt=document.getElementById("quill-trigger"); if(_qt)_qt.addEventListener("click",()=>openQuill());
   const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
   try{
-    const [ints,gifts]=await Promise.all([
-      sbGet("interactions?select=id,channel,on_date,note,contact_id&order=on_date.desc,id.desc&limit=400"),
-      sbGet("gifts?select=id,direction,item,occasion,on_date,contact_id&order=on_date.desc,id.desc&limit=400")
+    const [ints,gifts,dates]=await Promise.all([
+      sbGet("interactions?select=*&order=on_date.desc,id.desc&limit=500").catch(()=>[]),
+      sbGet("gifts?select=*&order=on_date.desc,id.desc&limit=400").catch(()=>[]),
+      sbGet("important_dates?select=*&order=on_date.desc,id.desc&limit=400").catch(()=>[])
     ]);
     const ev=[];
     const _seenMs=new Set();
-    ints.forEach(r=>{ if(r.channel==="milestone"){ const k=(r.on_date||"")+"|"+(r.note||""); if(_seenMs.has(k))return; _seenMs.add(k); ev.push({date:r.on_date, milestone:true, note:r.note||""}); } else ev.push({date:r.on_date, icon:(CH_META[r.channel]||"•"), pid:r.contact_id, text:r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`}); });
+    ints.forEach(r=>{ const _ph=r.photo_url||null;
+      if(r.channel==="milestone"||r.channel==="log"){ const k=r.channel+"|"+(r.on_date||"")+"|"+(r.note||""); if(_seenMs.has(k))return; _seenMs.add(k); ev.push({date:r.on_date, milestone:true, log:r.channel==="log", pid:r.contact_id, note:r.note||"", photo:_ph}); }
+      else ev.push({date:r.on_date, icon:(CH_META[r.channel]||"•"), pid:r.contact_id, text:r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`, photo:_ph}); });
+    const KIND_META={birth:["🎂","Birthday"],baptism:["🕊","Baptism"],communion:["✝","First Communion"],confirmation:["✝","Confirmation"],marriage:["💍","Marriage"],ordination:["🕊","Ordination"],death:["🕯","Passing"],other:["✧","Remembrance"]};
+    (dates||[]).forEach(r=>{ const km=KIND_META[r.kind]||KIND_META.other; ev.push({date:r.on_date, icon:km[0], pid:r.contact_id, text:`<em>${km[1]}</em>${r.label?` — ${esc(r.label)}`:""}`}); });
     gifts.forEach(r=>ev.push({date:r.on_date, icon:"🎁", pid:r.contact_id, text:`${r.direction==="given"?"Gave":"Received"} ${esc(r.item)}${r.occasion?` <span style="color:var(--muted)">· ${esc(r.occasion)}</span>`:""}`}));
     ev.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
     const feed=document.getElementById("journal-feed"); if(!feed)return;
@@ -452,13 +664,25 @@ async function renderJournal(){
       const d=e.date?new Date(e.date+"T00:00:00"):null;
       const key=d?`${d.getFullYear()}-${d.getMonth()}`:"und";
       if(key!==curKey){ curKey=key; const ml=d?`${MONTHS[d.getMonth()]} ${d.getFullYear()}`:"Undated"; html+=`<div style="font-family:'Cinzel',serif;color:var(--accent);font-size:13px;letter-spacing:.06em;margin:18px 0 6px;border-bottom:1px solid var(--line);padding-bottom:5px">${ml}</div>`; }
-      if(e.milestone){ html+=`<div style="display:flex;gap:11px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">✦</span><div style="flex:1"><div style="color:#ecd9a6;font-style:italic;line-height:1.55">${_hlMentions(e.note)}</div><div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`; }
+      const PH=e.photo?`<img src="${e.photo}" loading="lazy" style="display:block;max-width:100%;max-height:240px;border-radius:12px;margin-top:8px;border:1px solid rgba(242,236,221,.12)">`:"";
+      if(e.milestone){ const who=e.pid?"":`<span style="color:#C8945B;font-style:normal">🕯 The House · </span>`; html+=`<div style="display:flex;gap:11px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">${e.log?"🕯":"✦"}</span><div style="flex:1"><div style="color:#ecd9a6;font-style:italic;line-height:1.55">${who}${_hlMentions(e.note)}</div>${PH}<div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`; }
       else { const per=byId[e.pid];
-      const name=per?`<span class="row-link" data-pid="${per.id}" style="font-weight:600">${per.name}</span>`:`<span style="color:var(--muted)">Someone</span>`;
-      html+=`<div style="display:flex;gap:11px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">${e.icon}</span><div style="flex:1"><div style="color:var(--soft);line-height:1.5">${name} — ${e.text}</div><div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`; }
+      const name=per?`<span class="row-link" data-pid="${per.id}" style="font-weight:600">${per.name}</span>`:(e.pid?`<span style="color:var(--muted)">Someone</span>`:`<span style="color:#C8945B">🕯 The House</span>`);
+      html+=`<div style="display:flex;gap:11px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">${e.icon}</span><div style="flex:1"><div style="color:var(--soft);line-height:1.5">${name} — ${e.text}</div>${PH}<div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`; }
     });
     feed.innerHTML=html;
   }catch(err){ const feed=document.getElementById("journal-feed"); if(feed)feed.innerHTML=`<div style="color:var(--muted);padding:10px">Couldn't gather the chronicle just now.</div>`; console.warn(err); }
+}
+
+async function renderAlbum(){
+  const C=document.getElementById("content");
+  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Album</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the photographs of the House, kept with their stories</div></div><div id="album-grid"></div>`;
+  const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
+  let rows=[]; try{ rows=await sbGet("interactions?select=*&order=on_date.desc,id.desc&limit=600"); }catch(_){ }
+  const seen=new Set(); rows=(rows||[]).filter(r=>{ if(!r.photo_url)return false; if(seen.has(r.photo_url))return false; seen.add(r.photo_url); return true; });
+  const g=document.getElementById("album-grid"); if(!g)return;
+  if(!rows.length){ g.innerHTML=`<div class="card wide" style="color:var(--muted);font-family:'EB Garamond',serif;font-size:15px;line-height:1.8">No photographs yet.<br>Open <b style="color:var(--accent)">The Quill</b> (✒️ button, or press <b style="color:var(--accent)">ß</b>), write the moment, tap 📷 and attach the picture — it will live here, bound to its souls and its date.</div>`; return; }
+  g.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px">${rows.map(r=>{ const per=byId[r.contact_id]; return `<div class="card" style="padding:10px"><img src="${r.photo_url}" loading="lazy" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;border:1px solid rgba(242,236,221,.1)"><div style="font-family:'EB Garamond',serif;font-size:13.5px;color:var(--soft);margin-top:8px;line-height:1.45">${r.note?_hlMentions(r.note):""}</div><div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:4px">${r.on_date?fmtDate(r.on_date):""}${per?` · <span class="row-link" data-pid="${per.id}">${esc(per.name)}</span>`:""}</div></div>`; }).join("")}</div>`;
 }
 
 let _atlasMap=null;
@@ -510,7 +734,7 @@ function renderAtlas(){
 }
 document.addEventListener("click",e=>{ const a=e.target&&e.target.closest&&e.target.closest("[data-atlas-pid]"); if(a){ const p=PEOPLE.find(x=>x.id==a.dataset.atlasPid); if(p&&typeof showCard==="function")showCard(p); } });
 
-const TABS={overview:renderOverview,today:renderToday,journal:renderJournal,atlas:renderAtlas,calendar:renderCalendar,anniversaries:renderAnniversaries,health:renderHealth,circles:renderCircles,horizons:renderGeography};
+const TABS={overview:renderOverview,today:renderToday,journal:renderJournal,atlas:renderAtlas,album:renderAlbum,calendar:renderCalendar,anniversaries:renderAnniversaries,health:renderHealth,circles:renderCircles,horizons:renderGeography};
 let activeTab="overview";
 document.querySelectorAll(".tab").forEach(t=>{
   t.addEventListener("click",()=>{
@@ -734,7 +958,7 @@ async function editHouseField(p, col, label, kind){
 
 function coolOf(x){ if(!x||!x.last_contact)return false; const days=Math.floor((Date.now()-new Date(x.last_contact))/86400000); return days>(x.cadence_days||180); }
 function _today(){ const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; }
-const CH_META={call:"📞",visit:"☕",message:"✉️",letter:"✍️",email:"✉️",gathering:"🎉",milestone:"✦",other:"•"};
+const CH_META={call:"📞",visit:"☕",message:"✉️",letter:"✍️",email:"✉️",gathering:"🎉",milestone:"✦",log:"🕯",other:"•"};
 async function logMoment(who, channel){
   const note=prompt(`A note for this ${channel}? (optional — leave blank to just log it)`,"");
   if(note===null)return;
