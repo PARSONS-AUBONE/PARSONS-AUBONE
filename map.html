@@ -416,7 +416,7 @@ let _qs={type:QUILL_TYPES[0],log:false,photoFile:null};
   fileEl.addEventListener("change",()=>{ const f=fileEl.files&&fileEl.files[0]; if(!f)return; _qs.photoFile=f; const u=URL.createObjectURL(f); prev.style.display="block"; prev.innerHTML=`<img src="${u}" style="height:64px;border-radius:10px;border:1px solid rgba(242,236,221,.18);vertical-align:middle"> <span id="q-photorm" style="cursor:pointer;color:#C97F7F;font-size:13px;margin-left:8px">✕ quitar</span>`; prev.querySelector("#q-photorm").addEventListener("click",()=>{ _qs.photoFile=null; fileEl.value=""; prev.style.display="none"; prev.innerHTML=""; }); });
   ov.addEventListener("mousedown",e=>{ if(e.target===ov)closeQuill(); });
   ov.querySelector("#q-save").addEventListener("click",qSave);
-  window.openQuill=function(){ ov.style.display="flex"; _qs={type:quillTypes()[0],log:false,photoFile:null}; ed.innerHTML=""; dateEl.value=""; dateOk.textContent=""; prev.style.display="none"; prev.innerHTML=""; fileEl.value=""; chipTxt(); badge(); showPh(); closeAc(); setTimeout(()=>ed.focus(),0); };
+  window.openQuill=function(prefill){ ov.style.display="flex"; _qs={type:quillTypes()[0],log:false,photoFile:null}; ed.innerHTML=""; dateEl.value=""; dateOk.textContent=""; prev.style.display="none"; prev.innerHTML=""; fileEl.value=""; chipTxt(); badge(); showPh(); closeAc(); setTimeout(()=>{ ed.focus(); if(prefill&&prefill.id){ try{ const s=window.getSelection(); const r=document.createRange(); r.selectNodeContents(ed); r.collapse(false); s.removeAllRanges(); s.addRange(r); insertChip(prefill); }catch(_){ } } },0); };
   window.closeQuill=function(){ ov.style.display="none"; closeAc(); };
   function _qSer(withM){ let out=""; ed.childNodes.forEach(n=>{ if(n.nodeType===3)out+=n.textContent; else if(n.classList&&n.classList.contains("qchip")){ if(withM)out+=n.textContent; } else if(n.nodeName==="BR")out+=" "; else out+=(n.textContent||""); }); return out.replace(/ /g," ").replace(/ß(DATE|date)?/g,"").replace(/\s+/g," ").trim(); }
   async function qSave(){
@@ -683,6 +683,7 @@ function layoutClusters(keys){
   return res;
 }
 
+function isolateCircle(cid){ const c=CIRCLE_MAP[String(cid)]; state.visibleCircleIds=new Set([String(cid)]); try{ buildFilters(); }catch(_){ } renderGraph(); toast(`Showing ${c?c.label:"circle"} only — Filters to restore`); }
 let geoRes="";
 function applyGeo(res){ geoRes=res; cy.batch(()=>{ cy.elements().removeClass("geo-dim");
   if(res){ cy.nodes().forEach(n=>{ const pr=PEOPLE.find(x=>String(x.id)===n.id()); if(!pr||(pr.residence||"").trim()!==res) n.addClass("geo-dim"); });
@@ -826,7 +827,7 @@ function selectPerson(d){
 
   const circlePills=d.circleIds.map(cid=>{
     const c=CIRCLE_MAP[cid]||{label:cid,colour:"#666"};
-    return `<span class="info-tag" style="border-color:${c.colour};color:${c.colour}">${c.label}<span class="chip-x" data-rmcircle="${cid}" title="Remove from ${c.label}">×</span></span>`;
+    return `<span class="info-tag" data-gocircle="${cid}" style="border-color:${c.colour};color:${c.colour};cursor:pointer" title="Show only ${c.label} on the map">${c.label}<span class="chip-x" data-rmcircle="${cid}" title="Remove from ${c.label}">×</span></span>`;
   }).join("");
 
   function genSection(title,people,icon){
@@ -886,7 +887,7 @@ function selectPerson(d){
   const _penM = _lcD!=null? Math.floor(_lcD/30) : null;
   const _pen = (_lcD!=null && _lcD>(d.cadence_days||180));
   const houseHTML=`<div class="info-section"><h3>📍 Of the House</h3><div style="font-size:13px;line-height:1.7">
-    <div>📍 <strong>Residence:</strong> ${d.residence?d.residence:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-residence-btn">✎</span></div>
+    <div>📍 <strong>Residence:</strong> ${d.residence?`<span data-gores="${String(d.residence).replace(/"/g,'&quot;')}" style="cursor:pointer;border-bottom:1px dotted rgba(199,162,76,.6)">${d.residence}</span>`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-residence-btn">✎</span></div>
     <div style="margin-top:4px">🌒 <strong>Last heard from:</strong> ${d.last_contact?`${fmtDate(d.last_contact)} <span style="color:${_pen?'#C8945B':'var(--muted)'}">· ${_penM} ${_penM===1?'month':'months'} ago${_pen?' · in penumbra':''}</span>`:`<span style="color:var(--muted)">no correspondence recorded yet</span>`} <span class="edit-link" id="edit-lastcontact-btn">✎</span></div>
     <div style="margin-top:4px">⚠ <strong>Allergies &amp; care:</strong> ${d.allergies?d.allergies:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-allergies-btn">✎</span></div>
     <div style="margin-top:4px">✦ <strong>Values &amp; traditions:</strong> ${d.values_notes?d.values_notes:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-values-btn">✎</span></div>
@@ -937,7 +938,6 @@ function selectPerson(d){
     <div class="info-section"><h3>📅 Important dates</h3>
       <div>🎂 Birthday: ${d.birthday?`<strong>${fmtDate(d.birthday)}</strong>${ageOf(d)!=null?` · <span style="color:var(--accent)">${ageOf(d)} ${ageOf(d)===1?'yr':'yrs'}</span>`:""}`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-bday">✎ edit</span></div>
       <div style="margin-top:5px">💍 Anniversary: ${d.anniversary?`<strong>${fmtDate(d.anniversary)}</strong>${annYears(d.anniversary)!=null?` · <span style="color:var(--accent)">${annYears(d.anniversary)} yrs</span>`:""}`:`<span style="color:var(--muted)">—</span>`} <span class="edit-link" id="edit-anniv">✎ edit</span></div>
-      <div style="margin-top:8px"><a href="https://rezet-global.monday.com/boards/${CONTACTS_BOARD}/pulses/${d.id}" target="_blank" style="font-size:12px">Open in Monday →</a></div>
     </div>
   </div>`;
 
@@ -948,6 +948,8 @@ function selectPerson(d){
   // Interactive controls
   const acb=document.getElementById("add-circle-btn"); if(acb)acb.addEventListener("click",()=>openCirclePicker(d));
   infoEl.querySelectorAll("[data-rmcircle]").forEach(x=>x.addEventListener("click",ev=>{ev.stopPropagation();removeCircleFromContact(d.id,x.dataset.rmcircle);}));
+  infoEl.querySelectorAll("[data-gocircle]").forEach(el=>el.addEventListener("click",ev=>{ if(ev.target.classList&&ev.target.classList.contains("chip-x"))return; isolateCircle(el.dataset.gocircle); }));
+  infoEl.querySelectorAll("[data-gores]").forEach(el=>el.addEventListener("click",()=>{ applyGeo(el.dataset.gores); renderHorizons(); toast("Lighting "+el.dataset.gores+" ✦"); }));
   const eb=document.getElementById("edit-bday"); if(eb)eb.addEventListener("click",()=>editDate(d,"date_mm03gvpg",d.birthday));
   const ea=document.getElementById("edit-anniv"); if(ea)ea.addEventListener("click",()=>editDate(d,"date_mm4rwpfj",d.anniversary));
   const en=document.getElementById("edit-nat"); if(en)en.addEventListener("click",()=>editNationality(d));
