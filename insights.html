@@ -200,7 +200,7 @@ function tierColour(t){return t===5?"#df2f4a":t===15?"#fdab3d":t===50?"#4eccc6":
 
 function barChart(rows,maxVal){
   const m=maxVal||Math.max(...rows.map(r=>r.val),1);
-  return rows.map(r=>`<div class="chart-row">
+  return rows.map(r=>`<div class="chart-row"${r.cid?` data-gocircle="${r.cid}" style="cursor:pointer" title="Enter this circle"`:(r.tab?` data-gototab="${r.tab}" style="cursor:pointer" title="Open The Roll"`:"")}>
     <div class="chart-label"><span class="legend-dot" style="background:${r.colour}"></span>${r.label}</div>
     <div class="chart-bar"><div class="chart-bar-fill" style="width:${r.val/m*100}%;background:${r.colour}"></div></div>
     <div class="chart-value">${r.val}</div>
@@ -230,17 +230,17 @@ function renderOverview(){
   const withBday=PEOPLE.filter(p=>p.birthday).length;
   const withAnn=PEOPLE.filter(p=>p.anniversary).length;
   const pct=Math.round(withPhoto/total*100)||0;
-  const circleRows=CIRCLE_DEFS.map(c=>({label:c.label,colour:c.colour,val:PEOPLE.filter(p=>p.circleIds.includes(c.id)).length})).filter(r=>r.val>0).sort((a,b)=>b.val-a.val);
+  const circleRows=CIRCLE_DEFS.map(c=>({label:c.label,colour:c.colour,cid:c.id,val:PEOPLE.filter(p=>p.circleIds.includes(c.id)).length})).filter(r=>r.val>0).sort((a,b)=>b.val-a.val);
   const bigFamilies=Object.entries(PEOPLE.filter(p=>p.householdId).reduce((acc,p)=>{(acc[p.householdId]||=[]).push(p);return acc;},{})).map(([,m])=>m).sort((a,b)=>b.length-a.length).slice(0,10);
 
   document.getElementById("content").innerHTML=`
   <div class="grid">
-    <div class="card"><h2>Souls in the network</h2><div class="stat-big">${total}</div><div class="stat-label">${households} households · ${circleRows.length} circles</div></div>
-    <div class="card"><h2>Innermost</h2><div class="stat-big" style="color:var(--danger)">${inner}</div><div class="stat-label">Dunbar's dearest five</div></div>
-    <div class="card"><h2>Confidants</h2><div class="stat-big" style="color:var(--warning)">${sympathy}</div><div class="stat-label">People you'd ring on a bad day</div></div>
-    <div class="card"><h2>Companions</h2><div class="stat-big" style="color:var(--accent)">${active}</div><div class="stat-label">Neighbours, school, parish</div></div>
-    <div class="card wide"><h2>Dunbar's tiers</h2>${barChart([{label:"Innermost (5)",val:inner,colour:"#9A7B3F"},{label:"Confidants (15)",val:sympathy,colour:"#B98A4E"},{label:"Companions (50)",val:active,colour:"#7C9A86"},{label:"Acquaintances (150)",val:extended,colour:"#A9A293"}],150)}</div>
-    <div class="card"><h2>Profile completeness</h2><div class="stat-big">${pct}<span style="font-size:20px;color:var(--muted)">%</span></div><div class="stat-label">${withPhoto} photos · ${withBday} birthdays · ${withAnn} anniversaries</div><div class="progress"><div class="progress-fill" style="width:${pct}%;background:var(--accent)"></div></div></div>
+    <div class="card" data-gototab="health" style="cursor:pointer" title="Open The Roll"><h2>Souls in the network ›</h2><div class="stat-big">${total}</div><div class="stat-label">${households} households · ${circleRows.length} circles</div></div>
+    <div class="card" data-gototab="health" style="cursor:pointer" title="Open The Roll"><h2>Innermost ›</h2><div class="stat-big" style="color:var(--danger)">${inner}</div><div class="stat-label">Dunbar's dearest five</div></div>
+    <div class="card" data-gototab="health" style="cursor:pointer" title="Open The Roll"><h2>Confidants ›</h2><div class="stat-big" style="color:var(--warning)">${sympathy}</div><div class="stat-label">People you'd ring on a bad day</div></div>
+    <div class="card" data-gototab="health" style="cursor:pointer" title="Open The Roll"><h2>Companions ›</h2><div class="stat-big" style="color:var(--accent)">${active}</div><div class="stat-label">Neighbours, school, parish</div></div>
+    <div class="card wide"><h2>Dunbar's tiers</h2>${barChart([{label:"Innermost (5)",val:inner,colour:"#9A7B3F",tab:"health"},{label:"Confidants (15)",val:sympathy,colour:"#B98A4E",tab:"health"},{label:"Companions (50)",val:active,colour:"#7C9A86",tab:"health"},{label:"Acquaintances (150)",val:extended,colour:"#A9A293",tab:"health"}],150)}</div>
+    <div class="card" data-gototab="calendar" style="cursor:pointer" title="Open Birthdays"><h2>Profile completeness ›</h2><div class="stat-big">${pct}<span style="font-size:20px;color:var(--muted)">%</span></div><div class="stat-label">${withPhoto} photos · ${withBday} birthdays · ${withAnn} anniversaries</div><div class="progress"><div class="progress-fill" style="width:${pct}%;background:var(--accent)"></div></div></div>
   </div>
   <div class="grid">
     <div class="card wide"><h2 class="row-link" data-gototab="circles" title="Open the editable Circles tab">Circles by membership ›</h2>${barChart(circleRows)}</div>
@@ -254,7 +254,7 @@ function renderOverview(){
   </div>
   <div class="grid">
     <div class="card wide"><h2>Largest households</h2><table><thead><tr><th>Family</th><th>Members</th><th>Circle</th></tr></thead><tbody>
-      ${bigFamilies.map(m=>`<tr><td><strong class="row-link" data-pid="${m[0].id}">${m[0].household}</strong></td><td>${m.length} — ${m.map(x=>`<span class="row-link" data-pid="${x.id}">${x.name.split(" ").slice(-1)[0]}</span>`).join(", ")}</td><td><span class="pill" style="background:${m[0].circle.colour}22;color:${m[0].circle.colour}">${m[0].circle.label}</span></td></tr>`).join("")}
+      ${bigFamilies.map(m=>`<tr><td><strong class="row-link" data-pid="${m[0].id}">${m[0].household}</strong></td><td>${m.length} — ${m.map(x=>`<span class="row-link" data-pid="${x.id}">${x.name.split(" ").slice(-1)[0]}</span>`).join(", ")}</td><td><span class="pill" data-gocircle="${m[0].circle.id}" style="background:${m[0].circle.colour}22;color:${m[0].circle.colour};cursor:pointer">${m[0].circle.label}</span></td></tr>`).join("")}
     </tbody></table></div>
   </div>`;
 }
@@ -279,7 +279,7 @@ function renderCalendar(){
     const[y,m]=key.split("-");
     return`<div class="card"><h2>${months[parseInt(m)-1]} ${y}</h2>${ppl.sort((a,b)=>a.day-b.day).map(p=>{
       const days=Math.ceil((p.nextBday-TODAY)/86400000);
-      return`<div class="bday-row">${avatar(p)}<div><div style="font-weight:600"><span class="row-link" data-pid="${p.id}">${p.name}</span>${days<=14?`<span class="bday-soon">in ${days}d</span>`:""}</div><div style="font-size:11px;color:var(--muted)">${p.day} ${months[parseInt(m)-1]} · ${p.circle.label}</div></div></div>`;
+      return`<div class="bday-row">${avatar(p)}<div><div style="font-weight:600"><span class="row-link" data-pid="${p.id}">${p.name}</span>${days<=14?`<span class="bday-soon">in ${days}d</span>`:""}</div><div style="font-size:11px;color:var(--muted)">${p.day} ${months[parseInt(m)-1]} · <span class="row-link" data-gocircle="${p.circle.id}">${p.circle.label}</span></div></div></div>`;
     }).join("")}</div>`;
   }).join("");
   document.getElementById("content").innerHTML=`<div class="grid">${html}</div>`;
@@ -316,7 +316,7 @@ function renderAnniversaries(){
     const[y,m]=key.split("-");
     return`<div class="card"><h2>${MONTHS[parseInt(m)-1]} ${y}</h2>${ppl.sort((a,b)=>a.day-b.day).map(p=>{
       const days=Math.ceil((p.nextAnn-TODAY)/86400000);
-      return`<div class="bday-row">${avatar(p)}<div><div style="font-weight:600">💍 <span class="row-link" data-pid="${p.id}">${p._label}</span>${p.yrs!=null?` <span style="color:var(--accent);font-size:11px">${p.yrs} yrs</span>`:""}${days<=14?`<span class="bday-soon">in ${days}d</span>`:""}</div><div style="font-size:11px;color:var(--muted)">${p.day} ${MONTHS[parseInt(m)-1]} · ${p.circle.label}</div></div></div>`;
+      return`<div class="bday-row">${avatar(p)}<div><div style="font-weight:600">💍 <span class="row-link" data-pid="${p.id}">${p._label}</span>${p.yrs!=null?` <span style="color:var(--accent);font-size:11px">${p.yrs} yrs</span>`:""}${days<=14?`<span class="bday-soon">in ${days}d</span>`:""}</div><div style="font-size:11px;color:var(--muted)">${p.day} ${MONTHS[parseInt(m)-1]} · <span class="row-link" data-gocircle="${p.circle.id}">${p.circle.label}</span></div></div></div>`;
     }).join("")}</div>`;
   }).join("");
   document.getElementById("content").innerHTML=`<div class="grid">${html}</div>`;
@@ -326,10 +326,10 @@ function renderHealth(){
   const sorted=[...PEOPLE].sort((a,b)=>a.closeness.tier-b.closeness.tier);
   function familyCell(p){
     const t=getFamilyTree(p),parts=[];
-    if(t.grandparents.length)parts.push(`<span style="color:var(--muted)">👴 ${t.grandparents.map(x=>x.name.split(" ").slice(-1)[0]).join(", ")}</span>`);
-    if(t.parents.length)parts.push(`👨‍👩 ${t.parents.map(x=>x.name.split(" ").slice(-1)[0]).join(" + ")}`);
-    if(t.children.length)parts.push(`👶 ${t.children.map(x=>x.name.split(" ").slice(-1)[0]).join(", ")}`);
-    if(t.grandchildren.length)parts.push(`🧒 ${t.grandchildren.map(x=>x.name.split(" ").slice(-1)[0]).join(", ")}`);
+    if(t.grandparents.length)parts.push(`<span style="color:var(--muted)">👴 ${t.grandparents.map(x=>`<span class="row-link" data-pid="${x.id}">${x.name.split(" ").slice(-1)[0]}</span>`).join(", ")}</span>`);
+    if(t.parents.length)parts.push(`👨‍👩 ${t.parents.map(x=>`<span class="row-link" data-pid="${x.id}">${x.name.split(" ").slice(-1)[0]}</span>`).join(" + ")}`);
+    if(t.children.length)parts.push(`👶 ${t.children.map(x=>`<span class="row-link" data-pid="${x.id}">${x.name.split(" ").slice(-1)[0]}</span>`).join(", ")}`);
+    if(t.grandchildren.length)parts.push(`🧒 ${t.grandchildren.map(x=>`<span class="row-link" data-pid="${x.id}">${x.name.split(" ").slice(-1)[0]}</span>`).join(", ")}`);
     return parts.length?`<div style="font-size:11px;line-height:1.7">${parts.join("<br>")}</div>`:`<span style="color:var(--muted)">—</span>`;
   }
   document.getElementById("content").innerHTML=`<div class="grid"><div class="card wide"><h2>The Roll · all ${PEOPLE.length} people in Dunbar order</h2><table>
@@ -391,7 +391,7 @@ function renderToday(){
   const roll=PEOPLE.filter(p=>p.last_contact).map(p=>{ const days=Math.floor((TODAY-new Date(p.last_contact))/86400000); const cad=p.cadence_days||180; return {p,days,cad,ratio:days/cad}; }).filter(x=>x.ratio>=1&&(!_snz[x.p.id]||_snz[x.p.id]<_tdy)).sort((a,b)=>b.ratio-a.ratio).slice(0,7);
   const rollRow=x=>`<div class="bday-row">${avatar(x.p)}<div style="flex:1"><div style="font-weight:600"><span class="row-link" data-pid="${x.p.id}">${x.p.name}</span> <span style="font-family:var(--f-data);font-size:9.5px;letter-spacing:.08em;color:${x.ratio>=2?"#D2683C":"#C8945B"};border:1px solid ${x.ratio>=2?"rgba(210,104,60,.55)":"rgba(200,148,91,.5)"};border-radius:6px;padding:1px 6px;vertical-align:middle">${x.ratio>=2?"DRIFTING":"DUE"}</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--f-data)">${x.days}d silent · every ${x.cad}d</div></div><span class="edit-link" data-rollquill="${x.p.id}" title="Record that you reached out">✒️</span><span class="edit-link" data-rollsnooze="${x.p.id}" title="Rest for a week" style="margin-left:6px">😴</span></div>`;
   const rollHTML=roll.length?`<div class="card wide"><h2 style="border:0">📯 The Roll Call · souls awaiting word</h2><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:2px 26px">${roll.map(rollRow).join("")}</div></div>`:"";
-  const evRow=e=>`<div class="bday-row">${avatar(e.p)}<div><div style="font-weight:600">${e.kind==="anniversary"?"💍":"🎂"} <span class="row-link" data-pid="${e.p.id}">${e.label}</span> <span class="bday-soon">${e.days===0?"today":e.days===1?"tomorrow":"in "+e.days+"d"}</span></div><div style="font-size:11px;color:var(--muted)">${e.kind==="anniversary"?"Anniversary":"Birthday"} · ${e.p.circle.label}</div></div></div>`;
+  const evRow=e=>`<div class="bday-row">${avatar(e.p)}<div><div style="font-weight:600">${e.kind==="anniversary"?"💍":"🎂"} <span class="row-link" data-pid="${e.p.id}">${e.label}</span> <span class="bday-soon">${e.days===0?"today":e.days===1?"tomorrow":"in "+e.days+"d"}</span></div><div style="font-size:11px;color:var(--muted)">${e.kind==="anniversary"?"Anniversary":"Birthday"} · <span class="row-link" data-gocircle="${e.p.circle.id}">${e.p.circle.label}</span></div></div></div>`;
   const penRow=x=>`<div class="bday-row">${avatar(x.p)}<div><div style="font-weight:600"><span class="row-link" data-pid="${x.p.id}">${x.p.name}</span></div><div style="font-size:11px;color:var(--muted)">last heard from · ${x.d<60?x.d+" days":Math.round(x.d/30)+" months"} ago</div></div></div>`;
   const todayStr=TODAY.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
   C.innerHTML=`<div class="grid">
@@ -417,7 +417,7 @@ function renderGeography(){
   const other=PEOPLE.filter(p=>!placed.has(p.id));
   const row=p=>`<tr><td style="width:42px">${avatar(p)}</td><td><span class="row-link" data-pid="${p.id}"><strong>${p.name}</strong></span>${p.household?`<div style="font-size:11px;color:var(--muted)">${p.household}${p.role?` · ${p.role}`:""}</div>`:""}</td></tr>`;
   const card=g=>`<div class="card" style="border-top:2px solid ${g.colour}">
-    <h2 style="border:0"><span style="font-size:20px">${g.glyph}</span> ${g.key}<span style="float:right;font-family:'Cinzel',serif;color:${g.colour};font-size:20px">${g.people.length}</span></h2>
+    <h2 style="border:0;cursor:pointer" data-gototab="atlas" title="Behold on the Atlas"><span style="font-size:20px">${g.glyph}</span> ${g.key}<span style="float:right;font-family:'Cinzel',serif;color:${g.colour};font-size:20px">${g.people.length}</span></h2>
     ${g.sub?`<div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted);margin:-4px 0 10px">${g.sub}</div>`:`<div style="margin:-2px 0 8px"></div>`}
     <table><tbody>${g.people.map(row).join("")||`<tr><td style="color:var(--muted);font-size:12px">No souls recorded here yet.</td></tr>`}</tbody></table>
   </div>`;

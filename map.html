@@ -143,10 +143,10 @@
 <div id="recenter-fab" class="mode-toggle" style="bottom:20px;padding:9px 13px;font-size:16px" title="Re-centre the family">🧭</div>
 
 <div class="legend">
-  <div class="legend-row"><span class="legend-line" style="background:#E3C786;height:3px"></span>Marriage · partners</div>
-  <div class="legend-row"><span class="legend-line" style="background:#9A7B3F;height:2px"></span>Bloodline · arrow to the parent</div>
-  <div class="legend-row"><span class="legend-line" style="background:#C0A35F;height:2px"></span>Same household</div>
-  <div class="legend-row"><span class="legend-line" style="background:transparent;height:0;border-top:1.5px dashed #8E856F"></span>Shared circle</div>
+  <div class="legend-row" data-thread="partner" style="cursor:pointer" title="Tap to show / hide these threads"><span class="legend-line" style="background:#E3C786;height:3px"></span>Marriage · partners</div>
+  <div class="legend-row" data-thread="parent" style="cursor:pointer" title="Tap to show / hide these threads"><span class="legend-line" style="background:#9A7B3F;height:2px"></span>Bloodline · arrow to the parent</div>
+  <div class="legend-row" data-thread="household" style="cursor:pointer" title="Tap to show / hide these threads"><span class="legend-line" style="background:#C0A35F;height:2px"></span>Same household</div>
+  <div class="legend-row" data-thread="circle" style="cursor:pointer" title="Tap to show / hide these threads"><span class="legend-line" style="background:transparent;height:0;border-top:1.5px dashed #8E856F"></span>Shared circle</div>
   <div class="legend-row"><span style="width:10px;height:10px;border-radius:50%;border:2px solid #C9B37D;display:inline-block;flex-shrink:0"></span>At peace</div>
   <div class="legend-row"><span style="width:10px;height:10px;border-radius:50%;border:2px solid #C8945B;display:inline-block;flex-shrink:0"></span>In penumbra — cooling</div>
 </div>
@@ -533,7 +533,10 @@ function openShareCircle(a,b){
   ov.querySelector("#sc-new").addEventListener("click",async()=>{ const name=prompt("Name this circle (e.g. The Music Lovers):"); if(!name||!name.trim())return; close(); try{ const def=await createCircle(name.trim()); await addBoth(def.id); }catch(e){ toast("Couldn’t create",true); console.warn(e); } });
 }
 (function(){ const b=document.getElementById("mode-toggle"); if(b)b.addEventListener("click",()=>setEditMode(!_editMode)); const rc=document.getElementById("recenter-fab"); if(rc)rc.addEventListener("click",()=>{ try{cy.animate({fit:{eles:cy.elements(),padding:60}},{duration:320});}catch(_){ } });
-  const lb=document.getElementById("lineage-btn"); if(lb)lb.addEventListener("click",()=>{ _lineage=!_lineage; lb.textContent=_lineage?"✦ Constellation":"🌳 Lineage"; lb.style.borderColor=_lineage?"var(--gold)":""; lb.style.color=_lineage?"var(--gold-bright)":""; renderGraph(); toast(_lineage?"The Lineage — blood & marriage, elders above":"The Constellation"); }); })();
+  const lb=document.getElementById("lineage-btn"); if(lb)lb.addEventListener("click",()=>{ _lineage=!_lineage; lb.textContent=_lineage?"✦ Constellation":"🌳 Lineage"; lb.style.borderColor=_lineage?"var(--gold)":""; lb.style.color=_lineage?"var(--gold-bright)":""; renderGraph(); toast(_lineage?"The Lineage — blood & marriage, elders above":"The Constellation"); });
+  const TH={partner:"showPartner",parent:"showParent",household:"showHousehold",circle:"showCircle"};
+  document.querySelectorAll(".legend-row[data-thread]").forEach(row=>row.addEventListener("click",()=>{ const k=TH[row.dataset.thread]; state[k]=!state[k]; row.style.opacity=state[k]?"":"0.35"; renderGraph(); toast((state[k]?"Showing ":"Hiding ")+row.textContent.trim().toLowerCase()+" threads"); }));
+})();
 const _pkOpen=(p)=>{ try{selectPerson(p);}catch(_){}};
 const _pkRerender=(p)=>{ try{ renderGraph(); if(currentPerson&&currentPerson.id===p.id)selectPerson(p); }catch(_){}};
 
