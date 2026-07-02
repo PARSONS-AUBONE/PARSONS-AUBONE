@@ -807,11 +807,52 @@ function _atlasRefreshMarkers(map){
       w.addEventListener("click",()=>{ if(typeof showCard==="function")showCard(p); });
       personMs.push(new maplibregl.Marker({element:w}).setLngLat([lng,lat]).addTo(map)); }); });
   map._cityMs=cityMs; map._personMs=personMs;
+  if(typeof maplibregl!=="undefined"&&map.setPaintProperty) _atlasArcsSoon(map);
   if(map._syncFn){ try{ map.off("zoom",map._syncFn); }catch(_){ } }
   const sync=()=>{ const showP=map.getZoom()>=4.2; personMs.forEach(m=>{ m.getElement().style.display=showP?"":"none"; }); cityMs.forEach(m=>{ m.getElement().style.display=showP?"none":""; }); };
   map._syncFn=sync; map.on("zoom",sync); sync();
   return unplaced;
 }
+/* ── Golden arcs: the threads of the House across the earth ───────── */
+function _gcPoints(a,b,n){
+  const d2r=Math.PI/180, r2d=180/Math.PI;
+  const la1=a[0]*d2r,lo1=a[1]*d2r,la2=b[0]*d2r,lo2=b[1]*d2r;
+  const v1=[Math.cos(la1)*Math.cos(lo1),Math.cos(la1)*Math.sin(lo1),Math.sin(la1)];
+  const v2=[Math.cos(la2)*Math.cos(lo2),Math.cos(la2)*Math.sin(lo2),Math.sin(la2)];
+  const dot=Math.max(-1,Math.min(1,v1[0]*v2[0]+v1[1]*v2[1]+v1[2]*v2[2]));
+  const om=Math.acos(dot)||1e-6, so=Math.sin(om)||1e-6;
+  const pts=[];
+  for(let i=0;i<=n;i++){ const t=i/n, A=Math.sin((1-t)*om)/so, B=Math.sin(t*om)/so;
+    const x=A*v1[0]+B*v2[0], y=A*v1[1]+B*v2[1], z=A*v1[2]+B*v2[2];
+    pts.push([Math.atan2(y,x)*r2d, Math.asin(Math.max(-1,Math.min(1,z)))*r2d]); }
+  return pts;
+}
+function _arcPairs(){
+  const {placed}=_atlasGroups();
+  const cityOf={}; Object.keys(placed).forEach(city=>placed[city].ppl.forEach(p=>{ cityOf[p.id]=city; }));
+  const pairs=new Set();
+  PEOPLE.forEach(p=>{ const c1=cityOf[p.id]; if(!c1)return;
+    const rel=[]; if(p.partnerId)rel.push(p.partnerId); (p.parentIds||[]).forEach(x=>rel.push(x));
+    rel.forEach(id=>{ const c2=cityOf[id]; if(c2&&c2!==c1)pairs.add([c1,c2].sort().join("→")); }); });
+  let list=[...pairs].map(k=>k.split("→"));
+  if(!list.length){ const cities=Object.keys(placed);
+    if(cities.length>1){ const hub=cities.slice().sort((a,b)=>placed[b].ppl.length-placed[a].ppl.length)[0];
+      list=cities.filter(c=>c!==hub).map(c=>[hub,c]); } }
+  return {list,placed};
+}
+function _atlasArcs(map){ try{
+  const {list,placed}=_arcPairs();
+  const feats=list.map(pr=>({type:"Feature",properties:{},geometry:{type:"LineString",coordinates:_gcPoints(placed[pr[0]].co,placed[pr[1]].co,64)}}));
+  const data={type:"FeatureCollection",features:feats};
+  if(map.getSource("house-arcs")){ map.getSource("house-arcs").setData(data); return; }
+  map.addSource("house-arcs",{type:"geojson",data});
+  map.addLayer({id:"house-arcs-glow",type:"line",source:"house-arcs",paint:{"line-color":"rgba(201,162,74,.22)","line-width":5,"line-blur":3}});
+  map.addLayer({id:"house-arcs-line",type:"line",source:"house-arcs",paint:{"line-color":"rgba(227,199,134,.75)","line-width":1.5,"line-dasharray":[0,4,3]}});
+  const seq=[[0,4,3],[1,4,2],[2,4,1],[3,4,0],[0,1,3,3],[0,2,3,2],[0,3,3,1]]; let k=0;
+  if(!map.__arcT) map.__arcT=setInterval(()=>{ try{ map.setPaintProperty("house-arcs-line","line-dasharray",seq[k=(k+1)%seq.length]); }catch(_){ } },170);
+}catch(e){ console.warn("arcs",e); } }
+function _atlasArcsSoon(map){ if(!map)return; try{ if(map.isStyleLoaded&&map.isStyleLoaded()){ _atlasArcs(map); return; } }catch(_){ } map.once("load",()=>_atlasArcs(map)); }
+
 function _atlasGlobe(){
   const slot=document.getElementById("atlas-map"); if(!slot)return;
   if(_atlasGL&&_atlasGLHost){ // the globe is fashioned once and kept — simply re-enthrone it
@@ -835,7 +876,8 @@ function _atlasGlobe(){
       else if(l.type==="fill"){ map.setPaintProperty(l.id,"fill-color","#363a28"); try{ map.setPaintProperty(l.id,"fill-outline-color","rgba(227,199,134,.35)"); }catch(_){ } }
       else if(l.type==="line"){ map.setPaintProperty(l.id,"line-color","rgba(227,199,134,.55)"); try{ map.setPaintProperty(l.id,"line-width",1); }catch(_){ } }
       else if(l.type==="symbol"){ try{ map.setPaintProperty(l.id,"text-color","rgba(240,234,220,.5)"); map.setPaintProperty(l.id,"text-halo-color","rgba(0,0,0,.7)"); }catch(_){ } }
-    }); }catch(_){ } };
+    }); }catch(_){ }
+    try{ _atlasArcs(map); }catch(_){ } };
   map.on("style.load",()=>{ try{ map.setProjection({type:"globe"}); }catch(_){ } _dress(); });
   map.on("load",()=>{ try{ map.resize(); }catch(_){ } _dress(); });
   map._dress=_dress;
