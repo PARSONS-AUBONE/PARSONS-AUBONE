@@ -122,6 +122,17 @@
 /* Refinement pass — contrast & rhythm (Clay/Mesh research 2026-07) */
 :root{ --soft:#E6E0D0; --muted:rgba(240,234,220,.6); }
 #journal-feed{ font-size:15.5px !important; line-height:1.62; }
+@media print{
+  body{ background:#fff !important; overflow:visible !important; }
+  .cinema,.scrim,.grain,header,#quill-trigger,#tm-card,#j-searchbar,#quill-fab,#toast,.picker-overlay,#vigil,.card-drawer{ display:none !important; }
+  main,#content{ padding:0 !important; }
+  #content .card{ background:#fff !important; border:0 !important; box-shadow:none !important; backdrop-filter:none !important; }
+  #content, #content *{ color:#111 !important; text-shadow:none !important; }
+  #print-head{ display:block !important; text-align:center; font-family:'Cinzel',serif; color:#111 !important; margin:0 0 26px; }
+  #journal-feed{ border:0 !important; padding:0 !important; }
+  #journal-feed::before{ display:none !important; }
+  #journal-feed > div{ break-inside:avoid; animation:none !important; opacity:1 !important; transform:none !important; margin-left:0 !important; }
+}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080B11">
@@ -169,6 +180,7 @@
     </div>
     <button id="refresh-btn" class="tab" style="border:1px solid var(--border)">↻ Refresh</button>
     <button id="vigil-btn" class="tab" style="border:1px solid var(--border)" title="The Vigil — an ambient mode; the House breathes on a shelf iPad. Tap anywhere to return.">🕯</button>
+    <button id="export-btn" class="tab" style="border:1px solid var(--border)" title="Export the whole Archive — a JSON keepsake of every soul and every moment. Keep a copy safe.">⬇</button>
     <span class="stamp" id="stamp"></span>
   </div>
 </header>
@@ -587,7 +599,18 @@ function vigilStop(){ if(!_vg.on)return; _vg.on=false;
   document.removeEventListener("visibilitychange",_vgRelock);
   const ov=document.getElementById("vigil"); if(ov)ov.remove();
 }
+async function _exportArchive(){
+  toast("Gathering the whole Archive…");
+  const tables=["contacts","circles","families","contact_circles","parent_child","friends_with_kids","interactions","gifts","important_dates","house_days"];
+  const out={ house:"Parsons-Aubone", exported_at:new Date().toISOString(), tables:{} };
+  for(const t of tables){ try{ out.tables[t]=await sbGet(t+"?select=*&limit=10000"); }catch(_){ out.tables[t]=[]; } }
+  const blob=new Blob([JSON.stringify(out,null,1)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="parsons-aubone-archive-"+_today()+".json"; document.body.appendChild(a); a.click(); setTimeout(()=>a.remove(),400);
+  toast("The Archive is in your hands ⬇ — keep it somewhere safe");
+}
 (function(){ const b=document.getElementById("vigil-btn"); if(b)b.addEventListener("click",()=>vigilStart());
+  const xb=document.getElementById("export-btn"); if(xb)xb.addEventListener("click",()=>_exportArchive());
   try{ const _q=new URLSearchParams(location.search);
     if(_q.get("vigil")==="1") setTimeout(()=>{ try{ vigilStart(); }catch(_){ } },2800);
     const _f=_q.get("fly"); if(_f){ const _a=_f.split(","); setTimeout(()=>{ try{ atlasFly(parseFloat(_a[0]),parseFloat(_a[1]),decodeURIComponent(_a[2]||"")); }catch(_){ } },2600); }
@@ -856,10 +879,13 @@ let _tmDate=null;
 function _paintJournal(){
   const feed=document.getElementById("journal-feed"); if(!feed)return;
   const all=window._jEv||[], jb=window._jById||{};
-  const ev=_tmDate? all.filter(e=>e.date&&e.date<=_tmDate) : all;
+  let ev=_tmDate? all.filter(e=>e.date&&e.date<=_tmDate) : all;
+  if(window._jQ){ const q=_qNorm(window._jQ); ev=ev.filter(x=>_qNorm(((x.note||"")+" "+(x.text||"")).replace(/<[^>]*>/g," ")).includes(q)); }
+  const ph2=document.getElementById("print-head"); if(ph2)ph2.innerHTML=`<div style="font-size:11px;letter-spacing:.35em">THE HOUSE OF PARSONS-AUBONE</div><div style="font-size:22px;letter-spacing:.18em;margin-top:6px">THE CHRONICLE</div><div style="font-family:'EB Garamond',serif;font-style:italic;font-size:11px;margin-top:6px;letter-spacing:.05em">printed ${fmtDate(_today())}${_tmDate?` · as it was on ${fmtDate(_tmDate)}`:""}${window._jQ?` · seeking “${esc(window._jQ)}”`:""}</div>`;
   const banner=_tmDate?`<div style="text-align:center;padding:10px 0 6px"><span style="font-family:'Cinzel',serif;color:var(--accent);font-size:15px;letter-spacing:.06em">✦ The House as it was on ${fmtDate(_tmDate)}</span><div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:3px">${ev.length} ${ev.length===1?"memory":"memories"} · slide onward, or return to the present</div></div>`:"";
   if(!all.length){ feed.innerHTML=`<div style="color:var(--muted);padding:10px;line-height:1.7">The chronicle is still blank.<br>Open a soul — here or in The Map — and record a moment (a call, a visit, a keepsake). Each one will appear here, ordered through time, as the living memory of the House.</div>`; return; }
-  if(!ev.length){ feed.innerHTML=banner+`<div style="color:var(--muted);padding:12px;font-style:italic;font-family:'EB Garamond',serif">The chronicle had not yet begun.</div>`; return; }
+  const sq=window._jQ?`<div style="text-align:center;padding:6px 0"><span style="font-family:var(--f-data);font-size:10px;letter-spacing:.12em;color:#C8945B">${ev.length} ${ev.length===1?"MEMORY":"MEMORIES"} FOR “${esc(window._jQ).toUpperCase()}”</span></div>`:"";
+  if(!ev.length){ feed.innerHTML=banner+sq+`<div style="color:var(--muted);padding:12px;font-style:italic;font-family:'EB Garamond',serif">${window._jQ?"Nothing in the chronicle speaks of that.":"The chronicle had not yet begun."}</div>`; return; }
   window._jShown=ev;
   let html="", curKey="";
   ev.forEach((e,gi)=>{
@@ -872,7 +898,7 @@ function _paintJournal(){
     const name=per?`<span class="row-link" data-pid="${per.id}" style="font-weight:600">${per.name}</span>`:(e.pid?`<span style="color:var(--muted)">Someone</span>`:`<span style="color:#C8945B">🕯 The House</span>`);
     html+=`<div data-ev="${gi}" style="display:flex;gap:11px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05);cursor:pointer"><span style="font-size:16px">${e.icon}</span><div style="flex:1"><div style="color:var(--soft);line-height:1.5">${name} — ${e.text}</div>${PH}<div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`; }
   });
-  feed.innerHTML=banner+html;
+  feed.innerHTML=banner+sq+html;
 }
 function _tmWire(){
   const rg=document.getElementById("tm-range"), tin=document.getElementById("tm-in"), lab=document.getElementById("tm-label"), now=document.getElementById("tm-now");
@@ -897,8 +923,10 @@ function _tmWire(){
 
 async function renderJournal(){
   const C=document.getElementById("content");
-  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Journal</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the living chronicle of the House, gathered through time</div></div><div class="card wide" id="quill-trigger" style="margin-bottom:14px;cursor:text"><span style="font-size:18px;color:var(--accent)">✒️</span> <span style="font-family:'EB Garamond',serif;font-size:16.5px;color:var(--muted)">Inscribe in the chronicle… <b style="color:var(--accent)">#</b> type · <b style="color:var(--accent)">@</b> souls · <b style="color:var(--accent)">ß</b> anywhere · <b style="color:var(--accent)">📷</b> photos</span></div><div class="card wide" id="tm-card" style="margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:16px" title="The Time Machine">⏳</span><input id="tm-range" type="range" min="0" max="1000" value="1000" style="flex:1;min-width:150px;accent-color:#C7A24C"><input id="tm-in" type="text" placeholder="25 dic 2024 · 12/03/2025" style="background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-family:var(--f-data);font-size:11px;padding:6px 9px;width:170px;outline:none"><span id="tm-label" style="font-family:var(--f-data);font-size:11px;color:var(--muted)">the present</span><button id="tm-now" class="tab" style="display:none;border:1px solid var(--accent);color:var(--accent)">Return to the present</button></div><div id="journal-feed" class="card wide" style="font-family:'EB Garamond',serif;font-size:14px"><div style="color:var(--muted);padding:8px">Gathering the chronicle…</div></div>`;
+  C.innerHTML=`<div class="card wide" style="text-align:center;margin-bottom:14px"><h2 style="font-family:'Cinzel',serif;font-size:22px;border:0;text-transform:none;letter-spacing:.04em">The Journal</h2><div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted)">the living chronicle of the House, gathered through time</div></div><div class="card wide" id="quill-trigger" style="margin-bottom:14px;cursor:text"><span style="font-size:18px;color:var(--accent)">✒️</span> <span style="font-family:'EB Garamond',serif;font-size:16.5px;color:var(--muted)">Inscribe in the chronicle… <b style="color:var(--accent)">#</b> type · <b style="color:var(--accent)">@</b> souls · <b style="color:var(--accent)">ß</b> anywhere · <b style="color:var(--accent)">📷</b> photos</span></div><div class="card wide" id="j-searchbar" style="margin-bottom:14px;display:flex;align-items:center;gap:10px"><span style="font-size:14px;color:var(--muted)">🔎</span><input id="j-search" type="text" placeholder="Search the chronicle… a word, a name, a place" autocomplete="off" style="flex:1;background:transparent;border:0;outline:0;color:var(--soft);font-family:'EB Garamond',serif;font-size:15.5px"><span class="edit-link" id="j-print" title="Print the chronicle — a page for the family book">🖨</span></div><div id="print-head" style="display:none"></div><div class="card wide" id="tm-card" style="margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:16px" title="The Time Machine">⏳</span><input id="tm-range" type="range" min="0" max="1000" value="1000" style="flex:1;min-width:150px;accent-color:#C7A24C"><input id="tm-in" type="text" placeholder="25 dic 2024 · 12/03/2025" style="background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-family:var(--f-data);font-size:11px;padding:6px 9px;width:170px;outline:none"><span id="tm-label" style="font-family:var(--f-data);font-size:11px;color:var(--muted)">the present</span><button id="tm-now" class="tab" style="display:none;border:1px solid var(--accent);color:var(--accent)">Return to the present</button></div><div id="journal-feed" class="card wide" style="font-family:'EB Garamond',serif;font-size:14px"><div style="color:var(--muted);padding:8px">Gathering the chronicle…</div></div>`;
   const _qt=document.getElementById("quill-trigger"); if(_qt)_qt.addEventListener("click",()=>openQuill());
+  const _js=document.getElementById("j-search"); if(_js){ _js.value=window._jQ||""; let _jt; _js.addEventListener("input",()=>{ clearTimeout(_jt); _jt=setTimeout(()=>{ window._jQ=_js.value.trim(); _paintJournal(); },220); }); }
+  const _jp=document.getElementById("j-print"); if(_jp)_jp.addEventListener("click",()=>window.print());
   const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
   try{
     const [ints,gifts,dates]=await Promise.all([
