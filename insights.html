@@ -181,6 +181,7 @@
     <button id="refresh-btn" class="tab" style="border:1px solid var(--border)">↻ Refresh</button>
     <button id="vigil-btn" class="tab" style="border:1px solid var(--border)" title="The Vigil — an ambient mode; the House breathes on a shelf iPad. Tap anywhere to return.">🕯</button>
     <button id="export-btn" class="tab" style="border:1px solid var(--border)" title="Export the whole Archive — a JSON keepsake of every soul and every moment. Keep a copy safe.">⬇</button>
+    <button id="me-btn" class="tab" style="border:1px solid var(--gold,#C9A24A);color:var(--gold-bright)" title="Your own page — your portrait, your moments, your voice notes">☾ My page</button>
     <span class="stamp" id="stamp"></span>
   </div>
 </header>
@@ -609,8 +610,30 @@ async function _exportArchive(){
   a.download="parsons-aubone-archive-"+_today()+".json"; document.body.appendChild(a); a.click(); setTimeout(()=>a.remove(),400);
   toast("The Archive is in your hands ⬇ — keep it somewhere safe");
 }
+/* ── My page — your own soul, your multimedia, your voices ── */
+const PRINCIPAL={
+  "santi@parsons-aubone.com":{names:["santiago","santi","santiago parsons-aubone","santi parsons-aubone"],colour:"#3399ff"},
+  "cinthia@parsons-aubone.com":{names:["cinthia","cynthia","cintia","cinthia parsons-aubone"],colour:"#ff66b3"}
+};
+function _findMe(){
+  const em=(window._meEmail||"").toLowerCase();
+  try{ const saved=em&&localStorage.getItem("me:"+em); if(saved){ const p=PEOPLE.find(x=>String(x.id)===String(saved)); if(p)return p; } }catch(_){ }
+  const cfg=PRINCIPAL[em]; if(cfg){ const exact=PEOPLE.find(p=>cfg.names.includes((p.name||"").toLowerCase().trim())); if(exact)return exact;
+    const loose=PEOPLE.find(p=>cfg.names.some(n=>(p.name||"").toLowerCase().includes(n))); if(loose)return loose; }
+  return null;
+}
+function _claimMe(){
+  const em=(window._meEmail||"").toLowerCase();
+  openContactPicker({title:"Which soul is you? (remembered on this device)", onPick:id=>{ try{ if(em)localStorage.setItem("me:"+em,String(id)); }catch(_){ } const p=PEOPLE.find(x=>String(x.id)===String(id)); if(p)showCard(p); try{_paintMeButton();}catch(_){ } }});
+}
+function openMyPage(){ const me=_findMe(); if(me)showCard(me); else{ toast("Let's find your page — choose your own soul once"); _claimMe(); } }
+function _paintMeButton(){ const b=document.getElementById("me-btn"); if(!b)return; const me=_findMe();
+  if(me){ b.innerHTML="☾ "+esc((me.name||"My page").split(" ")[0]); const c=PRINCIPAL[(window._meEmail||"").toLowerCase()]; if(c)b.style.borderColor=c.colour; }
+  else b.innerHTML="☾ My page"; }
 (function(){ const b=document.getElementById("vigil-btn"); if(b)b.addEventListener("click",()=>vigilStart());
   const xb=document.getElementById("export-btn"); if(xb)xb.addEventListener("click",()=>_exportArchive());
+  const mb=document.getElementById("me-btn"); if(mb)mb.addEventListener("click",()=>openMyPage());
+  try{ _paintMeButton(); }catch(_){ }
   try{ const _q=new URLSearchParams(location.search);
     if(_q.get("vigil")==="1") setTimeout(()=>{ try{ vigilStart(); }catch(_){ } },2800);
     const _f=_q.get("fly"); if(_f){ const _a=_f.split(","); setTimeout(()=>{ try{ atlasFly(parseFloat(_a[0]),parseFloat(_a[1]),decodeURIComponent(_a[2]||"")); }catch(_){ } },2600); }
@@ -1314,6 +1337,7 @@ async function liveRefresh(){
     const byId=Object.fromEntries(fresh.map(p=>[p.id,p]));
     for(const p of fresh){ if(p.partnerId&&byId[p.partnerId]){ const q=byId[p.partnerId]; const best=Math.min(p.closeness.tier,q.closeness.tier); const lbl=p.closeness.tier===best?p.closeness.label:q.closeness.label; p.closeness=q.closeness={tier:best,label:lbl}; } }
     PEOPLE.length=0; fresh.forEach(p=>PEOPLE.push(p));
+    try{ _paintMeButton(); }catch(_){ }
     document.getElementById("subtitle").textContent=`${PEOPLE.length} people · Supabase`;
     if(rs){ rs.textContent=`· live ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`; rs.style.color="var(--muted)"; }
     if(TABS[activeTab])TABS[activeTab]();
@@ -1973,7 +1997,7 @@ async function _gateApply(session){
   if(session && session.access_token){
     const email=(session.user.email||"").toLowerCase();
     if(!ALLOW.includes(email)){ await _sbAuth.auth.signOut(); AUTH_TOKEN=null; showGate("That account isn't authorised for The Joneses."); return; }
-    AUTH_TOKEN=session.access_token;
+    AUTH_TOKEN=session.access_token; window._meEmail=email; try{_paintMeButton();}catch(_){ }
     if(!_authBooted){ _authBooted=true; hideGate(); addSignOut(email); liveRefresh(); }
   } else { AUTH_TOKEN=null; if(!_authBooted) showGate(); }
 }
