@@ -776,6 +776,32 @@ function toggle3D(force){
 }
 (function(){ const b=document.getElementById("btn3d"); if(b)b.addEventListener("click",()=>toggle3D()); })();
 
+function _hlMentions(note){ let out=esc(note); [...PEOPLE].sort((a,b)=>(b.name||"").length-(a.name||"").length).forEach(p=>{ if(!p.name)return; const tag=esc("@"+p.name); if(out.indexOf(tag)>=0){ out=out.split(tag).join(`<span style="color:var(--gold-bright,#E3C786);font-weight:600">@${esc(p.name)}</span>`); } }); return out; }
+function openMoment(e){
+  const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
+  const KIND=e.milestone?(e.log?["🕯","House log"]:["✦","Milestone"]):e.kind==="gift"?["🎁","Keepsake"]:[e.icon||(CH_META[e.channel]||"•"),String(e.channel||"Moment").replace(/^./,c=>c.toUpperCase())];
+  const who=[...new Set(e.pids||[])].map(id=>byId[id]).filter(Boolean);
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:560px;max-width:94vw">
+    <div class="picker-head"><h3 style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">${KIND[0]}</span> ${KIND[1]}<span style="margin-left:auto;font-family:var(--f-data);font-size:11px;color:var(--muted)">${e.date?fmtDate(e.date):""}</span></h3></div>
+    <div style="padding:8px 4px 4px;max-height:60vh;overflow-y:auto">
+      ${e.photo?`<img src="${e.photo}" style="width:100%;max-height:340px;object-fit:cover;border-radius:12px;border:1px solid rgba(242,236,221,.12);margin-bottom:12px">`:""}
+      <div style="font-family:'EB Garamond',serif;font-size:17px;line-height:1.65;${e.milestone?"font-style:italic;color:#ecd9a6":"color:var(--soft)"}">${e.milestone?_hlMentions(e.note):(e.text||"")}</div>
+      ${who.length?`<div style="margin-top:16px"><div style="font-family:var(--f-ui);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Souls present</div><div style="display:flex;flex-wrap:wrap;gap:6px">${who.map(p=>`<span class="mo-p" data-mid="${p.id}" style="border:1px solid var(--line);border-radius:9px;padding:4px 10px;font-size:13px;cursor:pointer;color:var(--soft)">${p.name}</span>`).join("")}</div></div>`:""}
+    </div>
+    <div class="picker-foot" style="display:flex;justify-content:space-between;align-items:center"><button class="toggle" id="mo-del" style="border:1px solid rgba(164,84,79,.6);color:#e0908b">🗑 Delete this entry</button><button class="toggle" id="mo-x">Close</button></div></div>`;
+  document.body.appendChild(ov); const close=()=>ov.remove();
+  ov.addEventListener("click",x=>{ if(x.target===ov)close(); });
+  ov.querySelector("#mo-x").addEventListener("click",close);
+  ov.querySelectorAll(".mo-p").forEach(el=>el.addEventListener("click",()=>{ close(); const p=PEOPLE.find(q=>q.id==el.dataset.mid); if(p)selectPerson(p); }));
+  ov.querySelector("#mo-del").addEventListener("click",async()=>{ if(!confirm("Strike this entry from the chronicle for ever?"))return; close();
+    try{
+      if(e.kind==="gift"&&e.gid!=null) await sbDelete("gifts","id=eq."+e.gid);
+      else if(e.ids&&e.ids.length) await sbDelete("interactions","id=in.("+e.ids.join(",")+")");
+      toast("Struck from the chronicle");
+      try{ if(currentPerson){ loadMoments(currentPerson); loadGifts(currentPerson); } }catch(_){ }
+    }catch(err){ toast("Couldn’t delete",true); console.warn(err); } });
+}
 /* ── Threads that speak: tap a bond to know it; double-tap to light its kind ── */
 let _bondLit=null,_edgeTapT=null,_edgeTapId=null;
 function _edgeInfo(e){ const d=e.data(); const s=PEOPLE.find(p=>String(p.id)===e.source().id()), t=PEOPLE.find(p=>String(p.id)===e.target().id());
@@ -1782,10 +1808,17 @@ async function setCadence(who, days){
   try{ await sbPatch("contacts","id",who.id,{cadence_days:val}); who.cadence_days=val; toast(val?("Cadence: every "+val+" days"):"Cadence cleared"); renderGraph(); if(currentPerson&&currentPerson.id===who.id)selectPerson(who); }
   catch(e){ toast("Couldn’t save",true); console.warn(e); }
 }
+async function _openMomentFromRow(r, who){
+  let ids=[r.id], pids=r.contact_id?[Number(r.contact_id)]:(who?[who.id]:[]);
+  try{ const q="interactions?select=id,contact_id&channel=eq."+encodeURIComponent(r.channel||"")+"&on_date="+(r.on_date?("eq."+r.on_date):"is.null")+"&note="+((r.note!=null&&r.note!=="")?("eq."+encodeURIComponent(r.note)):"is.null");
+    const g2=await sbGet(q); if(g2&&g2.length){ ids=g2.map(x=>x.id); pids=[...new Set(g2.map(x=>Number(x.contact_id)).filter(Boolean))]; } }catch(_){ }
+  openMoment({date:r.on_date, milestone:(r.channel==="milestone"||r.channel==="log"), log:r.channel==="log", kind:"interaction", channel:r.channel, note:r.note||"", text:r.note?esc(r.note):String(r.channel||"").replace(/^./,c=>c.toUpperCase()), photo:r.photo_url||null, ids, pids});
+}
 async function loadMoments(who){
   const el=document.getElementById("moments-list"); if(!el)return;
   try{ const rows=await sbGet(`interactions?contact_id=eq.${who.id}&order=on_date.desc,id.desc&limit=25`);
-    el.innerHTML=rows.length? rows.map(r=>`<div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line,#2a2a24)"><span>${CH_META[r.channel]||"•"}</span><div style="flex:1"><div style="color:var(--soft,#cfc9b8)">${r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`}</div><div style="font-size:10px;color:var(--muted);font-family:var(--f-data,monospace)">${fmtDate(r.on_date)}</div></div></div>`).join("") : `<span style="color:var(--muted)">No moments yet — tap a button above to begin the chronicle.</span>`;
+    el.innerHTML=rows.length? rows.map((r,i)=>`<div class="mom-row" data-mi="${i}" style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line,#2a2a24);cursor:pointer"><span>${CH_META[r.channel]||"•"}</span><div style="flex:1"><div style="color:var(--soft,#cfc9b8)">${r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`}</div><div style="font-size:10px;color:var(--muted);font-family:var(--f-data,monospace)">${fmtDate(r.on_date)}</div></div></div>`).join("") : `<span style="color:var(--muted)">No moments yet — tap a button above to begin the chronicle.</span>`;
+    el.querySelectorAll(".mom-row").forEach(d=>d.addEventListener("click",()=>_openMomentFromRow(rows[+d.dataset.mi], who)));
   }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load the chronicle.</span>`; console.warn(e); }
 }
 async function addGift(who){
@@ -1798,7 +1831,8 @@ async function addGift(who){
 async function loadGifts(who){
   const el=document.getElementById("gifts-list"); if(!el)return;
   try{ const rows=await sbGet(`gifts?contact_id=eq.${who.id}&order=id.desc&limit=25`);
-    el.innerHTML=rows.length? rows.map(r=>`<div style="padding:4px 0;border-top:1px solid var(--line,#2a2a24)"><span style="color:var(--soft,#cfc9b8)">${r.direction==="given"?"→ we gave":"← we received"}: ${esc(r.item)}</span>${r.occasion?` <span style="color:var(--muted);font-size:11px">· ${esc(r.occasion)}</span>`:""}</div>`).join("") : `<span style="color:var(--muted)">No keepsakes recorded yet — tap ＋ add.</span>`;
+    el.innerHTML=rows.length? rows.map((r,i)=>`<div class="gift-row" data-gi="${i}" style="padding:4px 0;border-top:1px solid var(--line,#2a2a24);cursor:pointer"><span style="color:var(--soft,#cfc9b8)">${r.direction==="given"?"→ we gave":"← we received"}: ${esc(r.item)}</span>${r.occasion?` <span style="color:var(--muted);font-size:11px">· ${esc(r.occasion)}</span>`:""}</div>`).join("") : `<span style="color:var(--muted)">No keepsakes recorded yet — tap ＋ add.</span>`;
+    el.querySelectorAll(".gift-row").forEach(d=>d.addEventListener("click",()=>{ const r2=rows[+d.dataset.gi]; openMoment({kind:"gift",gid:r2.id,date:r2.on_date,icon:"🎁",text:(r2.direction==="given"?"Gave ":"Received ")+esc(r2.item||"")+(r2.occasion?` · ${esc(r2.occasion)}`:""),pids:[who.id]}); }));
   }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load keepsakes.</span>`; console.warn(e); }
 }
 

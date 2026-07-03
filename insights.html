@@ -539,8 +539,10 @@ async function _vgBuild(kind){
   if(kind==="remember"){
     const occ=s2=>{ const a=s2.split("-"); const x=new Date(`${TODAY.getFullYear()}-${a[1]}-${a[2]}`),y=new Date(`${TODAY.getFullYear()+1}-${a[1]}-${a[2]}`); const nx=x>=TODAY?x:y; return Math.ceil((nx-TODAY)/86400000); };
     const ev=PEOPLE.filter(p=>p.birthday).map(p=>({p,d:occ(p.birthday),k:"🎂"})).concat(PEOPLE.filter(p=>p.anniversary).map(p=>({p,d:occ(p.anniversary),k:"💍"}))).filter(x=>x.d<=30).sort((a,b)=>a.d-b.d).slice(0,4);
-    if(!ev.length)return null;
-    return _vgWrap(H("TODAY THE HOUSE REMEMBERS")+`<div style="margin-top:34px;display:flex;flex-direction:column;gap:22px">${ev.map(x=>`<div style="display:flex;align-items:center;gap:18px">${_vgFace(x.p,54)}<div style="text-align:left"><div style="font-family:'EB Garamond',serif;font-size:clamp(16px,2vw,22px);color:#EDE6D6">${x.k} ${x.p.name}</div><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#C8945B;letter-spacing:.1em">${x.d===0?"TODAY":"IN "+x.d+" DAYS"}</div></div></div>`).join("")}</div>`);
+    if(_vg.hd==null){ try{ const rows=await sbGet("house_days?select=*"); _vg.hd=(rows||[]).filter(r=>r.kind!=="ical"&&r.month&&r.day).map(r=>{ let c=new Date(TODAY.getFullYear(),r.month-1,r.day); if(c<TODAY)c=new Date(TODAY.getFullYear()+1,r.month-1,r.day); return {label:r.label, d:Math.ceil((c-TODAY)/86400000)}; }).filter(x=>x.d<=30).sort((a,b)=>a.d-b.d); }catch(_){ _vg.hd=[]; } }
+    const hd=(_vg.hd||[]).slice(0,2);
+    if(!ev.length&&!hd.length)return null;
+    return _vgWrap(H("TODAY THE HOUSE REMEMBERS")+`<div style="margin-top:34px;display:flex;flex-direction:column;gap:22px">${ev.map(x=>`<div style="display:flex;align-items:center;gap:18px">${_vgFace(x.p,54)}<div style="text-align:left"><div style="font-family:'EB Garamond',serif;font-size:clamp(16px,2vw,22px);color:#EDE6D6">${x.k} ${x.p.name}</div><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#C8945B;letter-spacing:.1em">${x.d===0?"TODAY":"IN "+x.d+" DAYS"}</div></div></div>`).join("")}${hd.map(x=>`<div style="display:flex;align-items:center;gap:18px"><div style="width:54px;height:54px;border-radius:50%;border:2px solid rgba(201,162,74,.55);display:flex;align-items:center;justify-content:center;font-size:24px">📜</div><div style="text-align:left"><div style="font-family:'EB Garamond',serif;font-size:clamp(16px,2vw,22px);color:#EDE6D6">${esc(x.label)}</div><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#C8945B;letter-spacing:.1em">${x.d===0?"TODAY":"IN "+x.d+" DAYS"}</div></div></div>`).join("")}</div>`);
   }
   if(kind==="portrait"){
     const ph=await _vgPhotos(); if(!ph.length)return null;
@@ -825,7 +827,9 @@ function openMoment(e){
       if(e.kind==="gift"&&e.gid!=null) await sbDelete("gifts","id=eq."+e.gid);
       else if(e.kind==="sacred"&&e.did!=null) await sbDelete("important_dates","id=eq."+e.did);
       else if(e.ids&&e.ids.length) await sbDelete("interactions","id=in.("+e.ids.join(",")+")");
-      toast("Struck from the chronicle"); renderJournal();
+      toast("Struck from the chronicle");
+      try{ if(typeof activeTab!=="undefined"&&activeTab==="journal")renderJournal(); }catch(_){ }
+      try{ if(currentPerson){ loadMoments(currentPerson); loadGifts(currentPerson); } }catch(_){ }
     }catch(err){ toast("Couldn’t delete",true); console.warn(err); } });
 }
 function _hlMentions(note){ let out=esc(note); [...PEOPLE].sort((a,b)=>(b.name||"").length-(a.name||"").length).forEach(p=>{ if(!p.name)return; const tag=esc("@"+p.name); if(out.indexOf(tag)>=0){ out=out.split(tag).join(`<span class="row-link" data-pid="${p.id}" style="color:var(--accent);font-weight:600">@${esc(p.name)}</span>`); } }); return out; }
@@ -1364,10 +1368,17 @@ async function setCadence(who, days){
   try{ await sbPatch("contacts","id",who.id,{cadence_days:val}); who.cadence_days=val; toast(val?("Cadence: every "+val+" days"):"Cadence cleared"); if(currentPerson&&currentPerson.id===who.id)showCard(who); if(activeTab==="today")renderToday(); if(activeTab==="horizons")renderGeography(); }
   catch(e){ toast("Couldn’t save",true); console.warn(e); }
 }
+async function _openMomentFromRow(r, who){
+  let ids=[r.id], pids=r.contact_id?[Number(r.contact_id)]:(who?[who.id]:[]);
+  try{ const q="interactions?select=id,contact_id&channel=eq."+encodeURIComponent(r.channel||"")+"&on_date="+(r.on_date?("eq."+r.on_date):"is.null")+"&note="+((r.note!=null&&r.note!=="")?("eq."+encodeURIComponent(r.note)):"is.null");
+    const g2=await sbGet(q); if(g2&&g2.length){ ids=g2.map(x=>x.id); pids=[...new Set(g2.map(x=>Number(x.contact_id)).filter(Boolean))]; } }catch(_){ }
+  openMoment({date:r.on_date, milestone:(r.channel==="milestone"||r.channel==="log"), log:r.channel==="log", kind:"interaction", channel:r.channel, note:r.note||"", text:r.note?esc(r.note):String(r.channel||"").replace(/^./,c=>c.toUpperCase()), photo:r.photo_url||null, ids, pids});
+}
 async function loadMoments(who){
   const el=document.getElementById("moments-list"); if(!el)return;
   try{ const rows=await sbGet(`interactions?contact_id=eq.${who.id}&order=on_date.desc,id.desc&limit=25`);
-    el.innerHTML=rows.length? rows.map(r=>`<div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line,#2a2a24)"><span>${CH_META[r.channel]||"•"}</span><div style="flex:1"><div style="color:var(--soft,#cfc9b8)">${r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`}</div><div style="font-size:10px;color:var(--muted);font-family:var(--f-data,monospace)">${fmtDate(r.on_date)}</div></div></div>`).join("") : `<span style="color:var(--muted)">No moments yet — tap a button above to begin the chronicle.</span>`;
+    el.innerHTML=rows.length? rows.map((r,i)=>`<div class="mom-row" data-mi="${i}" style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line,#2a2a24);cursor:pointer"><span>${CH_META[r.channel]||"•"}</span><div style="flex:1"><div style="color:var(--soft,#cfc9b8)">${r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`}</div><div style="font-size:10px;color:var(--muted);font-family:var(--f-data,monospace)">${fmtDate(r.on_date)}</div></div></div>`).join("") : `<span style="color:var(--muted)">No moments yet — tap a button above to begin the chronicle.</span>`;
+    el.querySelectorAll(".mom-row").forEach(d=>d.addEventListener("click",()=>_openMomentFromRow(rows[+d.dataset.mi], who)));
   }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load the chronicle.</span>`; console.warn(e); }
 }
 async function addGift(who){
@@ -1380,7 +1391,8 @@ async function addGift(who){
 async function loadGifts(who){
   const el=document.getElementById("gifts-list"); if(!el)return;
   try{ const rows=await sbGet(`gifts?contact_id=eq.${who.id}&order=id.desc&limit=25`);
-    el.innerHTML=rows.length? rows.map(r=>`<div style="padding:4px 0;border-top:1px solid var(--line,#2a2a24)"><span style="color:var(--soft,#cfc9b8)">${r.direction==="given"?"→ we gave":"← we received"}: ${esc(r.item)}</span>${r.occasion?` <span style="color:var(--muted);font-size:11px">· ${esc(r.occasion)}</span>`:""}</div>`).join("") : `<span style="color:var(--muted)">No keepsakes recorded yet — tap ＋ add.</span>`;
+    el.innerHTML=rows.length? rows.map((r,i)=>`<div class="gift-row" data-gi="${i}" style="padding:4px 0;border-top:1px solid var(--line,#2a2a24);cursor:pointer"><span style="color:var(--soft,#cfc9b8)">${r.direction==="given"?"→ we gave":"← we received"}: ${esc(r.item)}</span>${r.occasion?` <span style="color:var(--muted);font-size:11px">· ${esc(r.occasion)}</span>`:""}</div>`).join("") : `<span style="color:var(--muted)">No keepsakes recorded yet — tap ＋ add.</span>`;
+    el.querySelectorAll(".gift-row").forEach(d=>d.addEventListener("click",()=>{ const r2=rows[+d.dataset.gi]; openMoment({kind:"gift",gid:r2.id,date:r2.on_date,icon:"🎁",text:(r2.direction==="given"?"Gave ":"Received ")+esc(r2.item||"")+(r2.occasion?` · ${esc(r2.occasion)}`:""),pids:[who.id]}); }));
   }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load keepsakes.</span>`; console.warn(e); }
 }
 
