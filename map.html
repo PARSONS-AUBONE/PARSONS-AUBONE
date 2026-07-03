@@ -724,7 +724,7 @@ function layoutClusters(keys){
 }
 
 /* ── ✧ The Constellation in Three Dimensions ─────────────────────── */
-let _3d=false, _fg=null, _spr3={};
+let _3d=false, _fg=null, _spr3={}, _spr3tex={};
 function _sprite3(p){
   if(_spr3[p.id]) return _spr3[p.id];
   const S=128, c=document.createElement("canvas"); c.width=S; c.height=S; const x=c.getContext("2d");
@@ -745,7 +745,7 @@ function _render3D(){
   if(_lineage) links=links.filter(l=>l.type==="partner"||l.type==="parent");
   let fz=null;
   if(_lineage){ fz={}; const pos=_lineageLayout(visible,links); Object.keys(pos).forEach(id=>{ fz[id]=-pos[id].y*0.85; }); }
-  const nodes=visible.map(p=>({ id:String(p.id), name:p.name, img:_sprite3(p), val:(p.closeness&&p.closeness.tier===5)?7:4, fz:fz?fz[String(p.id)]:undefined }));
+  const nodes=visible.map(p=>({ id:String(p.id), name:p.name, _pid:p.id, val:(p.closeness&&p.closeness.tier===5)?7:4, fz:fz?fz[String(p.id)]:undefined }));
   const LC={partner:"#E3C786",parent:"#9A7B3F",household:"#C0A35F",circle:"#8E856F"};
   const gl=links.map((l,i)=>({ source:String(typeof l.source==="object"?l.source.id:l.source), target:String(typeof l.target==="object"?l.target.id:l.target), c:LC[l.type]||"#8E856F", w:l.type==="partner"?2.4:l.type==="household"?1.4:1 }));
   _fg.graphData({nodes, links:gl});
@@ -764,7 +764,19 @@ function toggle3D(force){
       .showNavInfo(false)
       .width(window.innerWidth).height(window.innerHeight-60)
       .nodeLabel(n=>`<div style="font-family:Manrope,sans-serif;font-size:12px;color:#EDE6D6;background:rgba(12,13,10,.85);padding:4px 9px;border-radius:8px;border:1px solid rgba(201,162,74,.4)">${n.name}</div>`)
-      .nodeThreeObject(n=>{ try{ const tex=new THREE.TextureLoader().load(n.img); if(THREE.SRGBColorSpace)tex.colorSpace=THREE.SRGBColorSpace;
+      .nodeThreeObject(n=>{ try{
+          const S=128, cv=document.createElement("canvas"); cv.width=S; cv.height=S; const x=cv.getContext("2d");
+          const pr=PEOPLE.find(z=>z.id===n._pid)||{name:n.name};
+          const ring=coolOf(pr)?"#C8945B":"#C9B37D";
+          const draw=im=>{ x.clearRect(0,0,S,S); x.save(); x.beginPath(); x.arc(S/2,S/2,S/2-4,0,7); x.clip();
+            if(im){ try{ x.drawImage(im,0,0,S,S); }catch(_){ } }
+            else { const g=x.createRadialGradient(S/2,S*0.38,8,S/2,S/2,S*0.72); g.addColorStop(0,"#2b2d23"); g.addColorStop(1,"#16170f"); x.fillStyle=g; x.fillRect(0,0,S,S); x.fillStyle="#C7A24C"; x.font="600 52px Georgia, serif"; x.textAlign="center"; x.textBaseline="middle"; x.fillText(_initials(pr.name), S/2, S/2+4); }
+            x.restore(); x.beginPath(); x.arc(S/2,S/2,S/2-3,0,7); x.lineWidth=4; x.strokeStyle=ring; x.stroke(); };
+          draw(null);
+          const tex=new THREE.CanvasTexture(cv); if(THREE.SRGBColorSpace)tex.colorSpace=THREE.SRGBColorSpace;
+          _spr3tex[n._pid]={tex,draw};
+          const cached=_imgCache[n._pid];
+          if(cached&&cached.color&&!cached.mono){ const im=new Image(); im.onload=()=>{ try{ draw(im); tex.needsUpdate=true; }catch(_){ } }; im.onerror=()=>{}; im.src=cached.color; }
           const m=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false});
           const sp=new THREE.Sprite(m); const sc=(n.val>=7)?16:11; sp.scale.set(sc,sc,1); return sp; }catch(e4){ if(!window.__spr3w){window.__spr3w=1;toast("Portraits in 3D faltered \u2014 "+((e4&&e4.message)||e4),true);} return undefined; } })
       .linkColor(l=>l.c).linkWidth(l=>l.w).linkOpacity(0.45)
@@ -1026,6 +1038,7 @@ function _prepImages(people){
         x.filter="grayscale(1) brightness(0.94) contrast(1.03)"; x.drawImage(c,0,0); x.filter="none";
         const gray=c.toDataURL("image/jpeg",0.82);
         _imgCache[p.id]={color,gray,mono:false};
+        try{ if(_3d){ const e=_spr3tex[p.id]; if(e){ const im2=new Image(); im2.onload=()=>{ try{ e.draw(im2); e.tex.needsUpdate=true; }catch(_){ } }; im2.src=color; } } }catch(_){ }
       }catch(e){ /* tainted → keep the monogram already cached */ }
       res();
     };
