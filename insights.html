@@ -1424,6 +1424,58 @@ async function loadGifts(who){
   }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load keepsakes.</span>`; console.warn(e); }
 }
 
+function _mmss(s){ s=Math.max(0,Math.round(s||0)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
+async function loadVoiceNotes(who){
+  const el=document.getElementById("voice-list"); if(!el)return;
+  try{ const rows=await sbGet(`voice_notes?contact_id=eq.${who.id}&order=id.desc&limit=50`);
+    el.innerHTML=rows.length? rows.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line,#2a2a24)"><audio controls preload="none" src="${r.url}" style="flex:1;height:34px;max-width:100%"></audio><span style="font-size:10px;color:var(--muted);font-family:var(--f-data,monospace);white-space:nowrap">${r.seconds?_mmss(r.seconds):""}</span><span class="vn-del" data-id="${r.id}" title="Strike this voice from the archive" style="cursor:pointer;color:#c07a75">🗑</span></div>`).join("")
+      : `<span style="color:var(--muted)">No voices yet — tap ● record to leave one.</span>`;
+    el.querySelectorAll(".vn-del").forEach(x=>x.addEventListener("click",async()=>{ if(!confirm("Strike this voice from the archive for ever?"))return; try{ await sbDelete("voice_notes","id=eq."+x.dataset.id); toast("Struck from the archive"); loadVoiceNotes(who); }catch(e){ toast("Couldn’t delete",true); console.warn(e); } }));
+  }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load the voices — has the voice_notes table been created?</span>`; console.warn(e); }
+}
+async function uploadVoice(who, blob, seconds){
+  toast("Saving the voice…");
+  const ext=(blob.type&&blob.type.indexOf("mp4")>=0)?"mp4":(blob.type&&blob.type.indexOf("ogg")>=0?"ogg":"webm");
+  const path=`voice/${who.id}-${Date.now()}.${ext}`;
+  try{
+    const r=await fetch(`${SUPA.url}/storage/v1/object/photos/${path}`,{method:"POST",
+      headers:{apikey:SUPA.key,Authorization:"Bearer "+((typeof AUTH_TOKEN!=="undefined"&&AUTH_TOKEN)||SUPA.key),"Content-Type":blob.type||"audio/webm","x-upsert":"true"},
+      body:blob});
+    if(!r.ok) throw new Error("storage "+(await r.text()));
+    const url=`${SUPA.url}/storage/v1/object/public/photos/${path}`;
+    await sbInsert("voice_notes",[{contact_id:who.id,url,seconds,note:null}]);
+    toast("Voice note saved ✓"); loadVoiceNotes(who);
+  }catch(err){ toast("Couldn’t save the voice",true); console.warn(err); }
+}
+async function recordVoice(who){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!window.MediaRecorder){ toast("This device can’t record audio in the browser",true); return; }
+  let stream;
+  try{ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
+  catch(e){ toast("The microphone was not granted",true); return; }
+  if(!document.getElementById("vr-style")){ const st=document.createElement("style"); st.id="vr-style"; st.textContent="@keyframes vrpulse{0%{box-shadow:0 0 0 0 rgba(184,68,63,.55)}70%{box-shadow:0 0 0 18px rgba(184,68,63,0)}100%{box-shadow:0 0 0 0 rgba(184,68,63,0)}}"; document.head.appendChild(st); }
+  const pref=["audio/mp4","audio/webm;codecs=opus","audio/webm","audio/ogg"]; let mime="";
+  for(const m of pref){ try{ if(MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(m)){ mime=m; break; } }catch(_){ } }
+  let mr; try{ mr=mime?new MediaRecorder(stream,{mimeType:mime}):new MediaRecorder(stream); }catch(_){ mr=new MediaRecorder(stream); }
+  const chunks=[]; const t0=Date.now(); let cancelled=false;
+  mr.ondataavailable=e=>{ if(e.data&&e.data.size)chunks.push(e.data); };
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:360px;max-width:92vw;text-align:center">
+    <div class="picker-head"><h3>\U0001F3A4 A voice for ${esc(who.name)}</h3></div>
+    <div style="padding:24px 4px 10px">
+      <div style="width:66px;height:66px;border-radius:50%;background:#b8443f;margin:0 auto 16px;animation:vrpulse 1.25s infinite"></div>
+      <div id="vr-time" style="font-family:var(--f-data,monospace);font-size:24px;color:var(--soft)">0:00</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">Recording… speak freely</div>
+    </div>
+    <div class="picker-foot" style="display:flex;justify-content:space-between"><button class="tab" id="vr-cancel">Discard</button><button class="tab" id="vr-stop" style="border:1px solid var(--accent);color:var(--accent)">■ Stop &amp; save</button></div></div>`;
+  document.body.appendChild(ov);
+  const timeEl=ov.querySelector("#vr-time");
+  const tick=setInterval(()=>{ const sc=Math.floor((Date.now()-t0)/1000); timeEl.textContent=_mmss(sc); },250);
+  const cleanup=()=>{ clearInterval(tick); try{ stream.getTracks().forEach(t=>t.stop()); }catch(_){ } try{ ov.remove(); }catch(_){ } };
+  mr.onstop=async()=>{ const seconds=Math.max(1,Math.round((Date.now()-t0)/1000)); cleanup(); if(cancelled)return; const blob=new Blob(chunks,{type:(chunks[0]&&chunks[0].type)||mr.mimeType||"audio/webm"}); if(blob.size)await uploadVoice(who,blob,seconds); };
+  ov.querySelector("#vr-stop").addEventListener("click",()=>{ try{ mr.stop(); }catch(_){ cleanup(); } });
+  ov.querySelector("#vr-cancel").addEventListener("click",()=>{ cancelled=true; try{ mr.stop(); }catch(_){ cleanup(); } });
+  try{ mr.start(); }catch(_){ cleanup(); toast("Recording could not begin",true); }
+}
 /* ── Home on the earth: exact address, navigation, reachable souls ── */
 async function _editAddress(person){
   const ov=document.createElement("div"); ov.className="picker-overlay";
@@ -1551,6 +1603,7 @@ function showCard(p){
     <div id="moments-list" style="font-size:12px;color:var(--muted)">Loading the chronicle…</div>
   </div>`;
   const giftsHTML=`<div class="info-section"><h3>🎁 Keepsakes <span class="edit-link" id="add-gift-btn" style="cursor:pointer">＋ add</span></h3><div id="gifts-list" style="font-size:12px;color:var(--muted)">Loading…</div></div>`;
+  const voiceHTML=`<div class="info-section"><h3>🎤 Voice notes <span class="edit-link" id="add-voice-btn" style="cursor:pointer;color:#e0908b">● record</span></h3><div id="voice-list" style="font-size:12px;color:var(--muted)">Loading…</div></div>`;
   document.getElementById("card-root").innerHTML=`<div class="card-drawer"><button class="back" id="card-x">← Back to the chronicle</button>
     <div class="info-photo">${p.photo?`<img src="${p.photo}" onerror="this.parentNode.innerHTML='👤'">`:"👤"}</div>
     <div style="text-align:center;margin:2px 0 10px"><span class="edit-link" id="photo-btn">📷 ${p.photo?'Change':'Add'} photo</span></div>
@@ -1575,6 +1628,7 @@ function showCard(p){
     ${houseHTML}
     ${momentsHTML}
     ${giftsHTML}
+    ${voiceHTML}
     ${genList("Parents",parents,"👨‍👩")}
     <div class="info-section"><h3>💑 Partner <button class="btn-add" id="edit-partner-btn">${partner?'✎':'＋'}</button></h3>${partner?`<ul class="info-list"><li data-id="${partner.id}">${partner.name}</li></ul>`:`<span style="color:var(--muted);font-size:12px">No partner set</span>`}</div>
     ${genList("Children",children,"👶")}
@@ -1608,7 +1662,8 @@ function showCard(p){
   document.querySelectorAll(".mom-btn").forEach(b=>b.addEventListener("click",()=>logMoment(p,b.dataset.ch)));
   document.querySelectorAll(".cad-opt").forEach(b=>b.addEventListener("click",()=>setCadence(p,Number(b.dataset.cad))));
   const _agb=document.getElementById("add-gift-btn"); if(_agb)_agb.addEventListener("click",()=>addGift(p));
-  loadMoments(p); loadGifts(p);
+  const _avb=document.getElementById("add-voice-btn"); if(_avb)_avb.addEventListener("click",()=>recordVoice(p));
+  loadMoments(p); loadGifts(p); loadVoiceNotes(p);
   g("add-circle-btn").addEventListener("click",()=>openCirclePicker(p));
   g("edit-nat").addEventListener("click",()=>editNationality(p));
   g("photo-btn").addEventListener("click",()=>pickPhoto(p));
