@@ -396,6 +396,54 @@ const HZ_PAL=["#C9A24A","#A98FB0","#7BB0DA","#5E8B6A","#C8945B","#9AA7B3","#C97F
 function _cityish(k){ return (typeof CITY_COORDS!=="undefined"&&CITY_COORDS[_cnorm(k)]) || (typeof HZ_CANON!=="undefined"&&HZ_CANON.some(c=>c.key===k)) || (!/[\d,]/.test(k) && k.length<=24); }
 function hzMeta(k){ const c=HZ_CANON.find(x=>x.key===k); if(c)return c; let h=0; for(let i=0;i<k.length;i++)h=(h*31+k.charCodeAt(i))>>>0; return {key:k,glyph:"📍",colour:HZ_PAL[h%HZ_PAL.length]}; }
 
+function _icsUpcoming(text, windowDays){
+  const out=[]; const now=TODAY; const lim=new Date(now.getTime()+windowDays*86400000);
+  String(text||"").split(/BEGIN:VEVENT/).slice(1).forEach(bl=>{
+    const sm=bl.match(/SUMMARY(?:;[^:\n]*)?:(.+)/); const dm=bl.match(/DTSTART(?:;[^:\n]*)?:(\d{4})(\d{2})(\d{2})/);
+    if(!sm||!dm)return; const y=+dm[1],mo=+dm[2],d=+dm[3];
+    const yearly=/RRULE:[^\n]*FREQ=YEARLY/.test(bl);
+    let next=null;
+    if(yearly){ let c=new Date(now.getFullYear(),mo-1,d); if(c<now)c=new Date(now.getFullYear()+1,mo-1,d); next=c; }
+    else{ const c=new Date(y,mo-1,d); if(c>=now&&c<=lim)next=c; }
+    if(next&&next<=lim)out.push({label:sm[1].trim(), days:Math.ceil((next-now)/86400000), yrs:(yearly&&y<now.getFullYear())?(next.getFullYear()-y):null});
+  });
+  return out;
+}
+async function _addHouseDay(){
+  const label=prompt("Name the day (e.g. St Patrick’s Day, Día de la Independencia):"); if(!label||!label.trim())return;
+  const ds=prompt("When? (e.g. 17 mar, 9 de julio 1816, 25/12)"); if(!ds)return;
+  const d=parseNLDate(ds.trim()); if(!d){ toast("I cannot read that date",true); return; }
+  const a=d.split("-"); const hasY=/\d{4}/.test(ds);
+  try{ await sbInsert("house_days",[{label:label.trim(), month:+a[1], day:+a[2], year:hasY?+a[0]:null, kind:"observance"}]); toast("Inscribed among the days of the House 📜"); _fillHouseDays(); }
+  catch(e){ toast("Couldn’t save — has 07_days.sql been run?",true); console.warn(e); }
+}
+async function _linkCalendar(){
+  const name=prompt("Name this calendar (e.g. Liturgical feasts):"); if(!name||!name.trim())return;
+  const url=prompt("Paste its SECRET iCal address (Google Calendar → Settings → ‘Secret address in iCal format’):"); if(!url)return;
+  if(!/^https:\/\/calendar\.google\.com\//.test(url.trim())){ toast("That doesn’t look like a Google Calendar iCal address",true); return; }
+  try{ await sbInsert("house_days",[{label:name.trim(), kind:"ical", note:url.trim()}]); toast("Calendar bound to the House 📆"); _fillHouseDays(); }
+  catch(e){ toast("Couldn’t save — has 07_days.sql been run?",true); console.warn(e); }
+}
+async function _fillHouseDays(){
+  const el=document.getElementById("ddn-house"); if(!el)return;
+  let rows=[]; try{ rows=await sbGet("house_days?select=*&order=month.asc,day.asc"); }catch(_){ el.innerHTML=""; return; }
+  const now=TODAY, lim=new Date(now.getTime()+30*86400000);
+  const items=[];
+  (rows||[]).filter(r=>r.kind!=="ical"&&r.month&&r.day).forEach(r=>{
+    let c=new Date(now.getFullYear(),r.month-1,r.day); if(c<now)c=new Date(now.getFullYear()+1,r.month-1,r.day);
+    if(c<=lim)items.push({id:r.id, label:r.label, days:Math.ceil((c-now)/86400000), yrs:(r.year&&r.year<now.getFullYear())?(c.getFullYear()-r.year):null, glyph:"📜"});
+  });
+  const cals=(rows||[]).filter(r=>r.kind==="ical"&&r.note);
+  let calNote="";
+  for(const c of cals.slice(0,3)){
+    try{ const r=await fetch(`${SUPA.url}/functions/v1/house-ics`,{method:"POST",headers:{...sbH(),"Content-Type":"application/json"},body:JSON.stringify({url:c.note})});
+      if(r.ok){ const j=await r.json(); _icsUpcoming(j.ics,30).forEach(x=>items.push({id:null, label:x.label+" · "+c.label, days:x.days, yrs:x.yrs, glyph:"📆", calId:c.id})); }
+      else if(r.status===404&&!calNote){ calNote=`<div style="font-size:11px;color:var(--muted);padding:6px 0">📆 ${cals.length} calendar${cals.length>1?"s":""} bound — deploy the little <b>house-ics</b> function (no AI key needed) to bring their days in.</div>`; }
+    }catch(_){ }
+  }
+  items.sort((a,b)=>a.days-b.days);
+  el.innerHTML=(items.length?items.slice(0,8).map(it=>`<div class="bday-row"><span style="font-size:17px;width:34px;text-align:center">${it.glyph}</span><div style="flex:1"><div style="font-weight:600;color:var(--soft)">${esc(it.label)}${it.yrs?` <span style="color:var(--accent);font-size:11px">${it.yrs} yrs</span>`:""}</div><div style="font-size:11px;color:var(--muted);font-family:var(--f-data)">${it.days===0?"TODAY":"in "+it.days+"d"} · day of the House</div></div>${it.id?`<span class="edit-link" data-hd-del="${it.id}" title="Remove this day">✕</span>`:""}</div>`).join(""):"")+calNote;
+}
 async function _fillOnThisDay(){
   const el=document.getElementById("otd"); if(!el)return;
   try{
@@ -447,10 +495,10 @@ function renderToday(){
     </div>
     ${rollHTML}
     <div class="card wide" id="otd" style="display:none"></div>
-    <div class="card"><h2 style="border:0">🕯 Days drawing near</h2>${events.length?events.map(evRow).join(""):`<div class="empty">No birthdays or anniversaries within the next three weeks.</div>`}</div>
+    <div class="card"><h2 style="border:0">🕯 Days drawing near <span class="edit-link" id="hd-add" title="Add a day of the House — a feast, a national day, a remembrance">＋</span> <span class="edit-link" id="hd-cal" title="Link a Google Calendar (its secret iCal address)">📆</span></h2>${events.length?events.map(evRow).join(""):`<div class="empty">No birthdays or anniversaries within the next three weeks.</div>`}<div id="ddn-house"></div></div>
     <div class="card"><h2 style="border:0">🌒 Kinships in penumbra</h2>${penumbra.length?penumbra.map(penRow).join(""):`<div class="empty">No correspondence has fallen quiet — or none is recorded yet.<br><br>As you note letters, calls and visits, the House will gently raise the bonds grown distant.</div>`}</div>
   </div>`;
-  _fillOnThisDay();
+  _fillOnThisDay(); _fillHouseDays();
 }
 
 function renderGeography(){
@@ -549,6 +597,7 @@ const _quillAfter=()=>{ try{ if(typeof TABS!=="undefined"&&TABS[activeTab])TABS[
 const QUILL_TYPES=[
  {slug:"milestone",label:"Milestone",glyph:"✦",kind:"interaction",alias:"hito evento"},
  {slug:"log",label:"House Log",glyph:"🕯",kind:"interaction",alias:"bitacora historia diario log"},
+ {slug:"day",label:"Day of the House",glyph:"📜",kind:"day",needsDate:true,alias:"efemerides efemeride festividad feast national dia"},
  {slug:"call",label:"Call",glyph:"📞",kind:"interaction",alias:"llamada llamado telefono"},
  {slug:"visit",label:"Visit",glyph:"☕",kind:"interaction",alias:"visita cafe encuentro cena almuerzo asado"},
  {slug:"message",label:"Message",glyph:"✉️",kind:"interaction",alias:"mensaje whatsapp mail correo"},
@@ -714,6 +763,9 @@ let _qs={type:QUILL_TYPES[0],log:false,photoFile:null};
         try{ await sbInsert("interactions",rows); }
         catch(e){ if(photoUrl&&String(e).indexOf("photo_url")>=0){ await sbInsert("interactions",rows.map(r=>{ const c={...r}; delete c.photo_url; return c; })); toast("Saved — run 04_quill.sql so photographs stay attached",true); } else throw e; }
         mentions.forEach(id=>{ const p=PEOPLE.find(x=>x.id===id); if(p&&(!p.last_contact||p.last_contact<on))p.last_contact=on; });
+      } else if(type.kind==="day"){
+        const _dd=on.split("-"); const _hasY=/\d{4}/.test(dv||"");
+        await sbInsert("house_days",[{label:bare||full||"A day of the House", month:+_dd[1], day:+_dd[2], year:_hasY?+_dd[0]:null, kind:"observance"}]);
       } else if(type.kind==="gift"){
         if(!mentions.length){ toast("For whom? Name them with @",true); btn.disabled=false; return; }
         const bareP=bare?await _qPolish(bare):bare;
@@ -751,6 +803,31 @@ let _qs={type:QUILL_TYPES[0],log:false,photoFile:null};
   document.body.appendChild(fab);
 })();
 
+function openMoment(e){
+  const byId=window._jById||Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
+  const KIND=e.milestone?(e.log?["🕯","House log"]:["✦","Milestone"]):e.kind==="gift"?["🎁","Keepsake"]:e.kind==="sacred"?[e.icon,"Sacred day"]:[e.icon,String(e.channel||"Moment").replace(/^./,c=>c.toUpperCase())];
+  const who=[...new Set(e.pids||[])].map(id=>byId[id]).filter(Boolean);
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  ov.innerHTML=`<div class="picker" style="width:560px;max-width:94vw">
+    <div class="picker-head"><h3 style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">${KIND[0]}</span> ${KIND[1]}<span style="margin-left:auto;font-family:var(--f-data);font-size:11px;color:var(--muted)">${e.date?fmtDate(e.date):""}</span></h3></div>
+    <div style="padding:8px 4px 4px;max-height:60vh;overflow-y:auto">
+      ${e.photo?`<img src="${e.photo}" style="width:100%;max-height:340px;object-fit:cover;border-radius:12px;border:1px solid rgba(242,236,221,.12);margin-bottom:12px">`:""}
+      <div style="font-family:'EB Garamond',serif;font-size:17px;line-height:1.65;${e.milestone?"font-style:italic;color:#ecd9a6":"color:var(--soft)"}">${e.milestone?_hlMentions(e.note):(e.text||"")}</div>
+      ${who.length?`<div style="margin-top:16px"><div style="font-family:var(--f-ui);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Souls present</div><div style="display:flex;flex-wrap:wrap;gap:6px">${who.map(p=>`<span class="mo-p" data-mid="${p.id}" style="border:1px solid var(--line);border-radius:9px;padding:4px 10px;font-size:13px;cursor:pointer;color:var(--soft)">${p.name}</span>`).join("")}</div></div>`:""}
+    </div>
+    <div class="picker-foot" style="display:flex;justify-content:space-between;align-items:center"><button class="tab" id="mo-del" style="border:1px solid rgba(164,84,79,.6);color:#e0908b">🗑 Delete this entry</button><button class="tab" id="mo-x">Close</button></div></div>`;
+  document.body.appendChild(ov); const close=()=>ov.remove();
+  ov.addEventListener("click",x=>{ if(x.target===ov)close(); });
+  ov.querySelector("#mo-x").addEventListener("click",close);
+  ov.querySelectorAll(".mo-p").forEach(el=>el.addEventListener("click",()=>{ close(); const p=PEOPLE.find(q=>q.id==el.dataset.mid); if(p)showCard(p); }));
+  ov.querySelector("#mo-del").addEventListener("click",async()=>{ if(!confirm("Strike this entry from the chronicle for ever?"))return; close();
+    try{
+      if(e.kind==="gift"&&e.gid!=null) await sbDelete("gifts","id=eq."+e.gid);
+      else if(e.kind==="sacred"&&e.did!=null) await sbDelete("important_dates","id=eq."+e.did);
+      else if(e.ids&&e.ids.length) await sbDelete("interactions","id=in.("+e.ids.join(",")+")");
+      toast("Struck from the chronicle"); renderJournal();
+    }catch(err){ toast("Couldn’t delete",true); console.warn(err); } });
+}
 function _hlMentions(note){ let out=esc(note); [...PEOPLE].sort((a,b)=>(b.name||"").length-(a.name||"").length).forEach(p=>{ if(!p.name)return; const tag=esc("@"+p.name); if(out.indexOf(tag)>=0){ out=out.split(tag).join(`<span class="row-link" data-pid="${p.id}" style="color:var(--accent);font-weight:600">@${esc(p.name)}</span>`); } }); return out; }
 function _wireComposer(){
   const inp=document.getElementById("jc-input"), ac=document.getElementById("jc-ac"), ph=document.getElementById("jc-ph"), dateEl=document.getElementById("jc-date"), saveBtn=document.getElementById("jc-save");
@@ -779,16 +856,17 @@ function _paintJournal(){
   const banner=_tmDate?`<div style="text-align:center;padding:10px 0 6px"><span style="font-family:'Cinzel',serif;color:var(--accent);font-size:15px;letter-spacing:.06em">✦ The House as it was on ${fmtDate(_tmDate)}</span><div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:3px">${ev.length} ${ev.length===1?"memory":"memories"} · slide onward, or return to the present</div></div>`:"";
   if(!all.length){ feed.innerHTML=`<div style="color:var(--muted);padding:10px;line-height:1.7">The chronicle is still blank.<br>Open a soul — here or in The Map — and record a moment (a call, a visit, a keepsake). Each one will appear here, ordered through time, as the living memory of the House.</div>`; return; }
   if(!ev.length){ feed.innerHTML=banner+`<div style="color:var(--muted);padding:12px;font-style:italic;font-family:'EB Garamond',serif">The chronicle had not yet begun.</div>`; return; }
+  window._jShown=ev;
   let html="", curKey="";
-  ev.forEach(e=>{
+  ev.forEach((e,gi)=>{
     const d=e.date?new Date(e.date+"T00:00:00"):null;
     const key=d?`${d.getFullYear()}-${d.getMonth()}`:"und";
     if(key!==curKey){ curKey=key; const ml=d?`${MONTHS[d.getMonth()]} ${d.getFullYear()}`:"Undated"; html+=`<div style="font-family:'Cinzel',serif;color:var(--accent);font-size:13px;letter-spacing:.06em;margin:18px 0 6px;border-bottom:1px solid var(--line);padding-bottom:5px">${ml}</div>`; }
     const PH=e.photo?`<img src="${e.photo}" loading="lazy" style="display:block;max-width:100%;max-height:240px;border-radius:12px;margin-top:8px;border:1px solid rgba(242,236,221,.12)">`:"";
-    if(e.milestone){ const who=e.pid?"":`<span style="color:#C8945B;font-style:normal">🕯 The House · </span>`; html+=`<div style="display:flex;gap:11px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">${e.log?"🕯":"✦"}</span><div style="flex:1"><div style="color:#ecd9a6;font-style:italic;line-height:1.55">${who}${_hlMentions(e.note)}</div>${PH}<div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`; }
+    if(e.milestone){ const who=e.pid?"":`<span style="color:#C8945B;font-style:normal">🕯 The House · </span>`; html+=`<div data-ev="${gi}" style="display:flex;gap:11px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05);cursor:pointer"><span style="font-size:16px">${e.log?"🕯":"✦"}</span><div style="flex:1"><div style="color:#ecd9a6;font-style:italic;line-height:1.55">${who}${_hlMentions(e.note)}</div>${PH}<div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`; }
     else { const per=jb[e.pid];
     const name=per?`<span class="row-link" data-pid="${per.id}" style="font-weight:600">${per.name}</span>`:(e.pid?`<span style="color:var(--muted)">Someone</span>`:`<span style="color:#C8945B">🕯 The House</span>`);
-    html+=`<div style="display:flex;gap:11px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">${e.icon}</span><div style="flex:1"><div style="color:var(--soft);line-height:1.5">${name} — ${e.text}</div>${PH}<div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`; }
+    html+=`<div data-ev="${gi}" style="display:flex;gap:11px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05);cursor:pointer"><span style="font-size:16px">${e.icon}</span><div style="flex:1"><div style="color:var(--soft);line-height:1.5">${name} — ${e.text}</div>${PH}<div style="font-family:var(--f-data);font-size:10px;color:var(--muted);margin-top:2px">${e.date?fmtDate(e.date):""}</div></div></div>`; }
   });
   feed.innerHTML=banner+html;
 }
@@ -825,13 +903,16 @@ async function renderJournal(){
       sbGet("important_dates?select=*&order=on_date.desc,id.desc&limit=400").catch(()=>[])
     ]);
     const ev=[];
-    const _seenMs=new Set();
+    const _ms={};
     ints.forEach(r=>{ const _ph=r.photo_url||null;
-      if(r.channel==="milestone"||r.channel==="log"){ const k=r.channel+"|"+(r.on_date||"")+"|"+(r.note||""); if(_seenMs.has(k))return; _seenMs.add(k); ev.push({date:r.on_date, milestone:true, log:r.channel==="log", pid:r.contact_id, note:r.note||"", photo:_ph}); }
-      else ev.push({date:r.on_date, icon:(CH_META[r.channel]||"•"), pid:r.contact_id, text:r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`, photo:_ph}); });
+      if(r.channel==="milestone"||r.channel==="log"){ const k=r.channel+"|"+(r.on_date||"")+"|"+(r.note||"");
+        if(!_ms[k])_ms[k]={date:r.on_date, milestone:true, log:r.channel==="log", pid:r.contact_id, note:r.note||"", photo:_ph, kind:"interaction", channel:r.channel, ids:[], pids:[]};
+        _ms[k].ids.push(r.id); if(r.contact_id)_ms[k].pids.push(r.contact_id); if(_ph)_ms[k].photo=_ph; }
+      else ev.push({date:r.on_date, icon:(CH_META[r.channel]||"•"), pid:r.contact_id, note:r.note||"", text:r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`, photo:_ph, kind:"interaction", channel:r.channel, ids:[r.id], pids:r.contact_id?[r.contact_id]:[]}); });
+    Object.values(_ms).forEach(m=>ev.push(m));
     const KIND_META={birth:["🎂","Birthday"],baptism:["🕊","Baptism"],communion:["✝","First Communion"],confirmation:["✝","Confirmation"],marriage:["💍","Marriage"],ordination:["🕊","Ordination"],death:["🕯","Passing"],other:["✧","Remembrance"]};
-    (dates||[]).forEach(r=>{ const km=KIND_META[r.kind]||KIND_META.other; ev.push({date:r.on_date, icon:km[0], pid:r.contact_id, text:`<em>${km[1]}</em>${r.label?` — ${esc(r.label)}`:""}`}); });
-    gifts.forEach(r=>ev.push({date:r.on_date, icon:"🎁", pid:r.contact_id, text:`${r.direction==="given"?"Gave":"Received"} ${esc(r.item)}${r.occasion?` <span style="color:var(--muted)">· ${esc(r.occasion)}</span>`:""}`}));
+    (dates||[]).forEach(r=>{ const km=KIND_META[r.kind]||KIND_META.other; ev.push({date:r.on_date, icon:km[0], pid:r.contact_id, kind:"sacred", did:r.id, pids:r.contact_id?[r.contact_id]:[], text:`<em>${km[1]}</em>${r.label?` — ${esc(r.label)}`:""}`}); });
+    gifts.forEach(r=>ev.push({date:r.on_date, icon:"🎁", pid:r.contact_id, kind:"gift", gid:r.id, pids:r.contact_id?[r.contact_id]:[], text:`${r.direction==="given"?"Gave":"Received"} ${esc(r.item)}${r.occasion?` <span style="color:var(--muted)">· ${esc(r.occasion)}</span>`:""}`}));
     ev.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
     window._jEv=ev; window._jById=byId;
     _paintJournal(); _tmWire();
@@ -1242,6 +1323,10 @@ document.getElementById("content").addEventListener("click",e=>{
   const rs=e.target.closest("[data-rollsnooze]"); if(rs){ try{ const m=JSON.parse(localStorage.getItem("quill_snooze")||"{}"); const d=new Date(); d.setDate(d.getDate()+7); m[rs.dataset.rollsnooze]=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; localStorage.setItem("quill_snooze",JSON.stringify(m)); }catch(_){ } toast("Resting for a week 😴"); renderToday(); return; }
   const gc=e.target.closest("[data-gocircle]"); if(gc){ gotoCircle(gc.dataset.gocircle); return; }
   const pl=e.target.closest("[data-pid]"); if(pl){ const p=PEOPLE.find(x=>x.id==pl.dataset.pid); if(p){ if(currentPerson&&currentPerson.id==p.id&&document.querySelector(".card-drawer")){ closeCard(); } else { showCard(p); } } return; }
+  const me=e.target.closest("[data-ev]"); if(me){ const evd=(window._jShown||[])[+me.dataset.ev]; if(evd)openMoment(evd); return; }
+  const ha=e.target.closest("#hd-add"); if(ha){ _addHouseDay(); return; }
+  const hc=e.target.closest("#hd-cal"); if(hc){ _linkCalendar(); return; }
+  const hd=e.target.closest("[data-hd-del]"); if(hd){ (async()=>{ try{ await sbDelete("house_days","id=eq."+hd.dataset.hdDel); toast("Day removed"); _fillHouseDays(); }catch(_){ toast("Couldn’t remove",true); } })(); return; }
   const gt=e.target.closest("[data-gototab]"); if(gt){ const t=[...document.querySelectorAll('.tab')].find(x=>x.dataset.tab===gt.dataset.gototab); if(t)t.click(); }
 });
 

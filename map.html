@@ -300,6 +300,7 @@ const _quillAfter=()=>{ try{ renderGraph(); if(currentPerson)selectPerson(curren
 const QUILL_TYPES=[
  {slug:"milestone",label:"Milestone",glyph:"✦",kind:"interaction",alias:"hito evento"},
  {slug:"log",label:"House Log",glyph:"🕯",kind:"interaction",alias:"bitacora historia diario log"},
+ {slug:"day",label:"Day of the House",glyph:"📜",kind:"day",needsDate:true,alias:"efemerides efemeride festividad feast national dia"},
  {slug:"call",label:"Call",glyph:"📞",kind:"interaction",alias:"llamada llamado telefono"},
  {slug:"visit",label:"Visit",glyph:"☕",kind:"interaction",alias:"visita cafe encuentro cena almuerzo asado"},
  {slug:"message",label:"Message",glyph:"✉️",kind:"interaction",alias:"mensaje whatsapp mail correo"},
@@ -465,6 +466,9 @@ let _qs={type:QUILL_TYPES[0],log:false,photoFile:null};
         try{ await sbInsert("interactions",rows); }
         catch(e){ if(photoUrl&&String(e).indexOf("photo_url")>=0){ await sbInsert("interactions",rows.map(r=>{ const c={...r}; delete c.photo_url; return c; })); toast("Saved — run 04_quill.sql so photographs stay attached",true); } else throw e; }
         mentions.forEach(id=>{ const p=PEOPLE.find(x=>x.id===id); if(p&&(!p.last_contact||p.last_contact<on))p.last_contact=on; });
+      } else if(type.kind==="day"){
+        const _dd=on.split("-"); const _hasY=/\d{4}/.test(dv||"");
+        await sbInsert("house_days",[{label:bare||full||"A day of the House", month:+_dd[1], day:+_dd[2], year:_hasY?+_dd[0]:null, kind:"observance"}]);
       } else if(type.kind==="gift"){
         if(!mentions.length){ toast("For whom? Name them with @",true); btn.disabled=false; return; }
         const bareP=bare?await _qPolish(bare):bare;
