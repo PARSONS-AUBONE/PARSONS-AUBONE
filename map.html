@@ -7,8 +7,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/cytoscape-edgehandles@4.0.1/cytoscape-edgehandles.min.js"></script>
-<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-<script src="https://unpkg.com/3d-force-graph@1.73.6/dist/3d-force-graph.min.js"></script>
+<script type="module">
+(async()=>{ try{
+  const THREE=await import("https://esm.sh/three@0.180.0");
+  const mod=await import("https://esm.sh/3d-force-graph@1.79.0?deps=three@0.180.0");
+  window.__FG3D={ForceGraph3D:mod.default,THREE};
+}catch(e){ window.__FG3DERR=(e&&e.message)||String(e); }})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -749,18 +754,19 @@ function toggle3D(force){
   const on=(force!=null)?force:!_3d; _3d=on;
   const b=document.getElementById("btn3d"); if(b){ b.textContent=on?"✦ Flat":"✧ 3D"; b.style.borderColor=on?"var(--gold)":""; b.style.color=on?"var(--gold-bright)":""; }
   document.getElementById("cy").style.display=on?"none":"";
-  document.getElementById("cy3d").style.display=on?"":"none";
+  document.getElementById("cy3d").style.display=on?"block":"none";
   if(!on){ if(_fg)try{_fg.pauseAnimation();}catch(_){ } renderGraph(); return; }
-  if(typeof ForceGraph3D==="undefined"){ toast("The third dimension is still loading — try again in a moment",true); toggle3D(false); return; }
-  if(!_fg){
+  if(!window.__FG3D){ toast(window.__FG3DERR?("The third dimension could not open \u2014 "+window.__FG3DERR):"The third dimension is still loading \u2014 one breath, then try again",true); toggle3D(false); return; }
+  if(!_fg){ try{
+    const {ForceGraph3D,THREE}=window.__FG3D;
     _fg=ForceGraph3D()(document.getElementById("cy3d"))
       .backgroundColor("rgba(0,0,0,0)")
       .showNavInfo(false)
       .width(window.innerWidth).height(window.innerHeight-60)
       .nodeLabel(n=>`<div style="font-family:Manrope,sans-serif;font-size:12px;color:#EDE6D6;background:rgba(12,13,10,.85);padding:4px 9px;border-radius:8px;border:1px solid rgba(201,162,74,.4)">${n.name}</div>`)
-      .nodeThreeObject(n=>{ try{ const tex=new THREE.TextureLoader().load(n.img); tex.colorSpace=THREE.SRGBColorSpace;
+      .nodeThreeObject(n=>{ try{ const tex=new THREE.TextureLoader().load(n.img); if(THREE.SRGBColorSpace)tex.colorSpace=THREE.SRGBColorSpace;
           const m=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false});
-          const sp=new THREE.Sprite(m); const sc=(n.val>=7)?16:11; sp.scale.set(sc,sc,1); return sp; }catch(_){ return undefined; } })
+          const sp=new THREE.Sprite(m); const sc=(n.val>=7)?16:11; sp.scale.set(sc,sc,1); return sp; }catch(e4){ if(!window.__spr3w){window.__spr3w=1;toast("Portraits in 3D faltered \u2014 "+((e4&&e4.message)||e4),true);} return undefined; } })
       .linkColor(l=>l.c).linkWidth(l=>l.w).linkOpacity(0.45)
       .cooldownTime(9000).warmupTicks(30)
       .onNodeClick(n=>{ try{ const d=_fg.cameraPosition(); const nd={x:n.x,y:n.y,z:n.z}; const dist=70; const r=1+dist/Math.hypot(n.x||1,n.y||1,n.z||1);
@@ -769,9 +775,9 @@ function toggle3D(force){
       .onBackgroundClick(()=>{ const pf=document.getElementById("profile"); if(pf)pf.classList.remove("open"); currentPerson=null; });
     try{ _fg.renderer().setPixelRatio(Math.min(2,window.devicePixelRatio||1)); }catch(_){ }
     window.addEventListener("resize",()=>{ try{ if(_fg)_fg.width(window.innerWidth).height(window.innerHeight-60); }catch(_){ } });
-  }
+  }catch(e3){ _fg=null; toast("The third dimension stumbled \u2014 "+((e3&&e3.message)||e3),true); toggle3D(false); return; } }
   try{ _fg.resumeAnimation(); }catch(_){ }
-  _render3D();
+  try{ _render3D(); }catch(e5){ toast("The stars would not take their places \u2014 "+((e5&&e5.message)||e5),true); }
   toast("The constellation in three dimensions — drag to orbit, pinch to travel");
 }
 (function(){ const b=document.getElementById("btn3d"); if(b)b.addEventListener("click",()=>toggle3D()); })();
