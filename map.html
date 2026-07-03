@@ -777,8 +777,8 @@ function toggle3D(force){
           _spr3tex[n._pid]={tex,draw};
           const cached=_imgCache[n._pid];
           if(cached&&cached.color&&!cached.mono){ const im=new Image(); im.onload=()=>{ try{ draw(im); tex.needsUpdate=true; }catch(_){ } }; im.onerror=()=>{}; im.src=cached.color; }
-          const m=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false});
-          const sp=new THREE.Sprite(m); const sc=(n.val>=7)?16:11; sp.scale.set(sc,sc,1); return sp; }catch(e4){ if(!window.__spr3w){window.__spr3w=1;toast("Portraits in 3D faltered \u2014 "+((e4&&e4.message)||e4),true);} return undefined; } })
+          const m=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,depthTest:false});
+          const sp=new THREE.Sprite(m); sp.renderOrder=2; const sc=(n.val>=7)?16:11; sp.scale.set(sc,sc,1); return sp; }catch(e4){ if(!window.__spr3w){window.__spr3w=1;toast("Portraits in 3D faltered \u2014 "+((e4&&e4.message)||e4),true);} return undefined; } })
       .linkColor(l=>l.c).linkWidth(l=>l.w).linkOpacity(0.45)
       .cooldownTime(9000).warmupTicks(30)
       .onNodeClick(n=>{ try{ const d=_fg.cameraPosition(); const nd={x:n.x,y:n.y,z:n.z}; const dist=70; const r=1+dist/Math.hypot(n.x||1,n.y||1,n.z||1);
@@ -874,6 +874,35 @@ function toggleProcession(force){ const on=(force!=null)?force:!_proc; _proc=on;
 function _bondKey(a,b){ return a<b? a+"|"+b : b+"|"+a; }
 function _sharedCircles(a,b){ const pa=PEOPLE.find(x=>x.id===a),pb=PEOPLE.find(x=>x.id===b); if(!pa||!pb)return 0; const sb=new Set((pb.circleIds||[]).map(String)); return (pa.circleIds||[]).map(String).filter(c=>sb.has(c)).length; }
 function _affinity(a,b){ return _sharedCircles(a,b) + ((window._coBond&&window._coBond[_bondKey(a,b)])||0)*2; }
+function _affinityWhy(aId,bId){
+  const pa=PEOPLE.find(x=>x.id===aId), pb=PEOPLE.find(x=>x.id===bId);
+  const sb=new Set(((pb&&pb.circleIds)||[]).map(String));
+  const circles=(((pa&&pa.circleIds)||[]).map(String).filter(c=>sb.has(c))).map(id=>CIRCLE_MAP[id]).filter(Boolean);
+  const events=[]; const ev=window._coEv||{};
+  Object.keys(ev).forEach(k=>{ const st=ev[k]; if(st&&st.has(aId)&&st.has(bId)){ const parts=k.split("|"); events.push({channel:parts[0]||"", on_date:parts[1]||"", note:parts.slice(2).join("|")}); } });
+  events.sort((x,y)=>(y.on_date||"").localeCompare(x.on_date||""));
+  return {circles, events};
+}
+function _openAffinity(aId,bId){
+  const A=PEOPLE.find(x=>x.id===aId), B=PEOPLE.find(x=>x.id===bId); if(!A||!B)return;
+  const {circles,events}=_affinityWhy(aId,bId);
+  const ov=document.createElement("div"); ov.className="picker-overlay";
+  const circHTML=circles.length?`<div style="margin-bottom:16px"><div style="font-family:var(--f-ui);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Circles they share</div><div style="display:flex;flex-wrap:wrap;gap:6px">${circles.map(c=>`<span class="aff-c" data-cid="${c.id}" title="Light this circle" style="border:1px solid var(--line);border-radius:9px;padding:4px 10px;font-size:13px;cursor:pointer;color:var(--soft)"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.colour};margin-right:6px;vertical-align:middle"></span>${esc(c.label)}</span>`).join("")}</div></div>`:"";
+  const evHTML=events.length?`<div><div style="font-family:var(--f-ui);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Moments they shared</div>${events.map((e,i)=>`<div class="aff-m" data-i="${i}" style="display:flex;gap:9px;padding:9px 0;border-top:1px solid var(--line);cursor:pointer"><span style="font-size:15px">${CH_META[e.channel]||"•"}</span><div style="flex:1"><div style="color:var(--soft);font-family:'EB Garamond',serif;font-size:15px;line-height:1.5">${e.note?_hlMentions(e.note):String(e.channel||"Moment").replace(/^./,c=>c.toUpperCase())}</div><div style="font-size:10px;color:var(--muted);font-family:var(--f-data,monospace);margin-top:2px">${e.on_date?fmtDate(e.on_date):"—"}</div></div><span style="color:var(--muted);align-self:center">›</span></div>`).join("")}</div>`:`<div style="color:var(--muted);font-style:italic;font-family:'EB Garamond',serif;padding:6px 0;font-size:14px">No shared moments recorded yet — only their circles bind them for now.</div>`;
+  ov.innerHTML=`<div class="picker" style="width:560px;max-width:94vw">
+    <div class="picker-head"><h3 style="display:flex;align-items:center;gap:8px"><span style="font-size:18px;color:var(--gold-bright)">✦</span> ${esc(A.name)} &amp; ${esc(B.name)}</h3></div>
+    <div style="padding:10px 4px 4px;max-height:62vh;overflow-y:auto">
+      <div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted);margin-bottom:16px;font-size:13.5px">What draws them together — tap a moment to open, or strike it from the chronicle.</div>
+      ${circHTML}${evHTML}
+    </div>
+    <div class="picker-foot" style="display:flex;justify-content:space-between"><button class="toggle" id="aff-go">Open ${esc(B.name)}’s page</button><button class="toggle" id="aff-x">Close</button></div></div>`;
+  document.body.appendChild(ov); const close=()=>ov.remove();
+  ov.addEventListener("click",x=>{ if(x.target===ov)close(); });
+  ov.querySelector("#aff-x").addEventListener("click",close);
+  ov.querySelector("#aff-go").addEventListener("click",()=>{ close(); selectPerson(B); });
+  ov.querySelectorAll(".aff-c").forEach(el=>el.addEventListener("click",()=>{ close(); try{ isolateCircle(el.dataset.cid); toast("Lighting the circle they share ✦"); }catch(_){ } }));
+  ov.querySelectorAll(".aff-m").forEach(el=>el.addEventListener("click",()=>{ const e=events[+el.dataset.i]; close(); _openMomentFromRow({channel:e.channel,on_date:e.on_date||null,note:e.note||""}, A); }));
+}
 let _egoRoot=null, _egoLevel=1, _egoMode="kin";
 function _kinExpand(set){ const out=new Set(set); const byId=Object.fromEntries(PEOPLE.map(p=>[p.id,p]));
   set.forEach(id=>{ const p=byId[id]; if(!p)return;
@@ -1233,7 +1262,7 @@ function selectPerson(d){
   </div>`;
   const giftsHTML=`<div class="info-section"><h3>🎁 Keepsakes <span class="edit-link" id="add-gift-btn" style="cursor:pointer">＋ add</span></h3><div id="gifts-list" style="font-size:12px;color:var(--muted)">Loading…</div></div>`;
   const _affTop=PEOPLE.filter(p=>p.id!==d.id).map(p=>({p,sh:_sharedCircles(d.id,p.id),co:((window._coBond&&window._coBond[_bondKey(d.id,p.id)])||0)})).map(x=>({...x,s:x.sh+x.co*2})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,6);
-  const affHTML=_affTop.length?`<div class="info-section"><h3>✦ Closest by affinity</h3><ul class="info-list">${_affTop.map(x=>`<li data-id="${x.p.id}">${x.p.name} <span style="color:var(--muted);font-size:11px;font-family:var(--f-data)">· ${x.sh}⭐ ${x.co}✒</span></li>`).join("")}</ul><div style="font-size:10px;color:var(--muted-2,var(--muted));margin-top:4px">⭐ shared circles · ✒ moments recorded together</div></div>`:"";
+  const affHTML=_affTop.length?`<div class="info-section"><h3>✦ Closest by affinity</h3><ul class="info-list">${_affTop.map(x=>`<li data-aff="${x.p.id}" title="See what draws them together">${x.p.name} <span style="color:var(--muted);font-size:11px;font-family:var(--f-data)">· ${x.sh}⭐ ${x.co}✒</span></li>`).join("")}</ul><div style="font-size:10px;color:var(--muted-2,var(--muted));margin-top:4px">⭐ shared circles · ✒ moments together · tap a name to see why</div></div>`:"";
   const infoEl=document.getElementById("info");
   infoEl.innerHTML=`<div style="margin-top:10px">
     <div class="info-photo">${d.photo?`<img src="${d.photo}" onerror="this.parentNode.innerHTML='👤'" alt="">`:"👤"}</div>
@@ -1272,6 +1301,9 @@ function selectPerson(d){
   document.getElementById("profile").classList.toggle("penumbra", _pen);
   infoEl.querySelectorAll("li[data-id]").forEach(li=>{
     li.addEventListener("click",()=>{const t=PEOPLE.find(p=>p.id==li.dataset.id);if(t)selectPerson(t);});
+  });
+  infoEl.querySelectorAll("li[data-aff]").forEach(li=>{
+    li.addEventListener("click",()=>_openAffinity(d.id, Number(li.dataset.aff)));
   });
   // Interactive controls
   const acb=document.getElementById("add-circle-btn"); if(acb)acb.addEventListener("click",()=>openCirclePicker(d));
@@ -1568,7 +1600,7 @@ async function refreshFromMonday(){
     // co-attendance bonds: rows sharing (channel|date|note) were one shared moment
     window._coBond={};
     (function(){ const ev={}; (ints||[]).forEach(r=>{ if(!r.contact_id)return; const k=(r.channel||"")+"|"+(r.on_date||"")+"|"+(r.note||""); (ev[k]=ev[k]||new Set()).add(Number(r.contact_id)); });
-      Object.values(ev).forEach(st=>{ const ids=[...st]; for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){ const k=_bondKey(ids[i],ids[j]); window._coBond[k]=(window._coBond[k]||0)+1; } }); })();
+      Object.values(ev).forEach(st=>{ const ids=[...st]; for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){ const k=_bondKey(ids[i],ids[j]); window._coBond[k]=(window._coBond[k]||0)+1; } }); window._coEv=ev; })();
     circles.forEach(c=>{ const id=String(c.id);
       if(!CIRCLE_MAP[id]){ const def={id,label:c.name,colour:c.colour||"#5a6270"}; CIRCLE_DEFS.push(def); CIRCLE_MAP[id]=def; state.visibleCircleIds.add(id); }
       else { CIRCLE_MAP[id].label=c.name; if(c.colour)CIRCLE_MAP[id].colour=c.colour; } });
