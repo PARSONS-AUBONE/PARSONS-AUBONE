@@ -778,7 +778,7 @@ function toggle3D(force){
           const cached=_imgCache[n._pid];
           if(cached&&cached.color&&!cached.mono){ const im=new Image(); im.onload=()=>{ try{ draw(im); tex.needsUpdate=true; }catch(_){ } }; im.onerror=()=>{}; im.src=cached.color; }
           const m=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,depthTest:false});
-          const sp=new THREE.Sprite(m); sp.renderOrder=2; const sc=(n.val>=7)?16:11; sp.scale.set(sc,sc,1); return sp; }catch(e4){ if(!window.__spr3w){window.__spr3w=1;toast("Portraits in 3D faltered \u2014 "+((e4&&e4.message)||e4),true);} return undefined; } })
+          const sp=new THREE.Sprite(m); sp.renderOrder=999; const sc=(n.val>=7)?16:11; sp.scale.set(sc,sc,1); return sp; }catch(e4){ if(!window.__spr3w){window.__spr3w=1;toast("Portraits in 3D faltered \u2014 "+((e4&&e4.message)||e4),true);} return undefined; } })
       .linkColor(l=>l.c).linkWidth(l=>l.w).linkOpacity(0.45)
       .cooldownTime(9000).warmupTicks(30)
       .onNodeClick(n=>{ try{ const d=_fg.cameraPosition(); const nd={x:n.x,y:n.y,z:n.z}; const dist=70; const r=1+dist/Math.hypot(n.x||1,n.y||1,n.z||1);
