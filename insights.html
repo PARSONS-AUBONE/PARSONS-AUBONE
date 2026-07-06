@@ -167,7 +167,8 @@
   </div>
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
     <div class="tabs" id="tabs">
-      <div class="tab active" data-tab="overview">At a Glance</div>
+      <div class="tab active" data-tab="home">🔥 The Hearth</div>
+      <div class="tab" data-tab="overview">At a Glance</div>
       <div class="tab" data-tab="today">Today</div>
       <div class="tab" data-tab="journal">The Journal</div>
       <div class="tab" data-tab="atlas">The Atlas</div>
@@ -480,6 +481,58 @@ async function _fillOnThisDay(){
       const ph=h.photo?`<img src="${h.photo}" loading="lazy" style="display:block;max-width:100%;max-height:180px;border-radius:10px;margin-top:6px;border:1px solid rgba(242,236,221,.12)">`:"";
       return `<div style="display:flex;gap:11px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">${h.icon}</span><div style="flex:1"><div style="font-family:'EB Garamond',serif;font-size:15px;color:var(--soft)">${who}${h.text}</div>${ph}<div style="font-family:var(--f-data);font-size:10px;color:#C8945B;letter-spacing:.08em;margin-top:2px">${h.y===1?"A YEAR AGO TODAY":h.y+" YEARS AGO TODAY"}</div></div></div>`; }).join("");
   }catch(_){ el.style.display="none"; }
+}
+function renderHome(){
+  const C=document.getElementById("content");
+  const h=new Date().getHours();
+  const greet=h<12?"Good morning":h<18?"Good afternoon":"Good evening";
+  let me=null; try{ me=_findMe(); }catch(_){ }
+  const first=me?me.name.split(" ")[0]:"keeper of the House";
+  const todayStr=TODAY.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
+
+  // — the day's reach-outs (top of the roll) —
+  const _snz=(()=>{ try{ return JSON.parse(localStorage.getItem("quill_snooze")||"{}"); }catch(_){ return {}; } })();
+  const _tdy=_today();
+  const roll=PEOPLE.filter(p=>p.last_contact).map(p=>{ const days=Math.floor((TODAY-new Date(p.last_contact))/86400000); const cad=p.cadence_days||180; return {p,days,cad,ratio:days/cad}; }).filter(x=>x.ratio>=1&&(!_snz[x.p.id]||_snz[x.p.id]<_tdy)).sort((a,b)=>b.ratio-a.ratio).slice(0,4);
+
+  // — days drawing near —
+  const occ=s=>{const a=s.split("-"),mm=a[1],dd=a[2];const x=new Date(`${TODAY.getFullYear()}-${mm}-${dd}`),y=new Date(`${TODAY.getFullYear()+1}-${mm}-${dd}`);const n=x>=TODAY?x:y;return{n,days:Math.ceil((n-TODAY)/86400000)};};
+  const near=[...PEOPLE.filter(p=>p.birthday).map(p=>({p,...occ(p.birthday),g:"🎂"})),...PEOPLE.filter(p=>p.anniversary).map(p=>({p,...occ(p.anniversary),g:"💍"}))].sort((a,b)=>a.days-b.days).slice(0,4);
+
+  // — to rekindle (deepest penumbra) —
+  const pen=PEOPLE.filter(p=>p.last_contact).map(p=>({p,d:Math.floor((TODAY-new Date(p.last_contact))/86400000)})).filter(x=>x.d>(x.p.cadence_days||180)).sort((a,b)=>b.d-a.d).slice(0,3);
+
+  // — rediscover: a soul from long ago, steady for the day, shuffleable —
+  const pool=PEOPLE.filter(p=>!p.last_contact||Math.floor((TODAY-new Date(p.last_contact))/86400000)>365);
+  const doy=Math.floor((TODAY-new Date(TODAY.getFullYear(),0,0))/86400000);
+  window._rdOff=window._rdOff||0;
+  const rd=pool.length?pool[(doy+window._rdOff)%pool.length]:null;
+
+  const row=(p,sub,extra)=>`<div class="bday-row">${avatar(p)}<div style="flex:1;min-width:0"><div style="font-weight:600"><span class="row-link" data-pid="${p.id}">${p.name}</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--f-data);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div></div>${extra||""}</div>`;
+  const quillBtn=p=>`<span class="edit-link" data-rollquill="${p.id}" title="Record that you reached out">✒️</span>`;
+
+  C.innerHTML=`<div class="grid">
+    <div class="card wide" style="text-align:center;padding-top:26px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)">${todayStr}</div>
+      <h2 style="font-family:'Cinzel',serif;font-size:26px;margin:10px 0 4px;border:0;text-transform:none;letter-spacing:.05em">${greet}, ${esc(first)}</h2>
+      <div style="font-family:'EB Garamond',serif;font-style:italic;color:var(--muted);margin-bottom:18px">the House is gathered around you.</div>
+      <div id="hearth-b" style="max-width:520px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:13px 18px;border:1px solid rgba(201,162,74,.4);border-radius:14px;background:rgba(201,162,74,.05);cursor:text;text-align:left">
+        <span style="font-family:'EB Garamond',Georgia,serif;font-style:italic;font-size:22px;color:var(--accent);line-height:1">ß</span>
+        <span style="flex:1;font-family:'EB Garamond',serif;font-size:16px;color:var(--muted)">Summon a soul, leap to a view — or write…</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 7px">ß</span>
+      </div>
+    </div>
+    <div class="card"><h2 style="border:0">☀ To greet today</h2>${roll.length?roll.map(x=>row(x.p,`${x.days}d silent · every ${x.cad}d`,quillBtn(x.p))).join(""):`<div class="empty">All the bonds are tended — the House rests easy.</div>`}<div style="margin-top:10px"><span class="row-link" data-gototab="today" style="font-size:12px;color:var(--muted)">the full day →</span></div></div>
+    <div class="card"><h2 style="border:0">🕯 Days drawing near</h2>${near.length?near.map(e=>row(e.p,`${e.g} ${e.days===0?"today":e.days===1?"tomorrow":"in "+e.days+" days"}`)).join(""):`<div class="empty">No days approach within sight.</div>`}<div style="margin-top:10px"><span class="row-link" data-gototab="calendar" style="font-size:12px;color:var(--muted)">the year's candles →</span></div></div>
+    <div class="card"><h2 style="border:0">🌒 To rekindle</h2>${pen.length?pen.map(x=>row(x.p,`quiet for ${x.d<60?x.d+" days":Math.round(x.d/30)+" months"}`,quillBtn(x.p))).join(""):`<div class="empty">No bond has drifted into shadow.</div>`}
+      ${rd?`<div style="margin-top:14px;padding:13px 14px;border:1px dashed rgba(200,148,91,.45);border-radius:12px;background:rgba(200,148,91,.05)">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:#C8945B;margin-bottom:8px">✉ Rediscover</div>
+        ${row(rd, rd.last_contact?("it has been an age — "+Math.round((TODAY-new Date(rd.last_contact))/86400000/30)+" months"):"no word recorded yet", quillBtn(rd))}
+        <div style="text-align:right;margin-top:4px"><span class="edit-link" id="rd-shuffle" style="font-size:11px">↻ another soul</span></div>
+      </div>`:""}</div>
+  </div>`;
+  const bb=document.getElementById("hearth-b"); if(bb)bb.addEventListener("click",()=>{ if(typeof openPalette==="function")openPalette(); });
+  const sh=document.getElementById("rd-shuffle"); if(sh)sh.addEventListener("click",()=>{ window._rdOff=(window._rdOff||0)+1; renderHome(); });
 }
 function renderToday(){
   const C=document.getElementById("content");
@@ -1281,8 +1334,8 @@ function _atlasGlobe(){
 }
 document.addEventListener("click",e=>{ const a=e.target&&e.target.closest&&e.target.closest("[data-atlas-pid]"); if(a){ const p=PEOPLE.find(x=>x.id==a.dataset.atlasPid); if(p&&typeof showCard==="function")showCard(p); } });
 
-const TABS={overview:renderOverview,today:renderToday,journal:renderJournal,atlas:renderAtlas,album:renderAlbum,calendar:renderCalendar,anniversaries:renderAnniversaries,health:renderHealth,circles:renderCircles,horizons:renderGeography};
-let activeTab="overview";
+const TABS={home:renderHome,overview:renderOverview,today:renderToday,journal:renderJournal,atlas:renderAtlas,album:renderAlbum,calendar:renderCalendar,anniversaries:renderAnniversaries,health:renderHealth,circles:renderCircles,horizons:renderGeography};
+let activeTab="home";
 document.querySelectorAll(".tab").forEach(t=>{
   t.addEventListener("click",()=>{
     document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
@@ -1535,18 +1588,49 @@ async function _openMomentFromRow(r, who){
     const g2=await sbGet(q); if(g2&&g2.length){ ids=g2.map(x=>x.id); pids=[...new Set(g2.map(x=>Number(x.contact_id)).filter(Boolean))]; } }catch(_){ }
   openMoment({date:r.on_date, milestone:(r.channel==="milestone"||r.channel==="log"), log:r.channel==="log", kind:"interaction", channel:r.channel, note:r.note||"", text:r.note?esc(r.note):String(r.channel||"").replace(/^./,c=>c.toUpperCase()), photo:r.photo_url||null, ids, pids});
 }
+const _SAC_G={birth:"🎂",baptism:"🕊",communion:"✝",confirmation:"✝",marriage:"💍",death:"🕯"};
 async function loadMoments(who){
   const el=document.getElementById("moments-list"); if(!el)return;
-  try{ const rows=await sbGet(`interactions?contact_id=eq.${who.id}&order=on_date.desc,id.desc&limit=25`);
-    el.innerHTML=rows.length? rows.map((r,i)=>`<div class="mom-row" data-mi="${i}" style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line,#2a2a24);cursor:pointer"><span>${CH_META[r.channel]||"•"}</span><div style="flex:1"><div style="color:var(--soft,#cfc9b8)">${r.note?esc(r.note):`<span style="color:var(--muted)">${String(r.channel||"").replace(/^./,c=>c.toUpperCase())}</span>`}</div><div style="font-size:10px;color:var(--muted);font-family:var(--f-data,monospace)">${fmtDate(r.on_date)}</div></div></div>`).join("") : `<span style="color:var(--muted)">No moments yet — tap a button above to begin the chronicle.</span>`;
-    el.querySelectorAll(".mom-row").forEach(d=>d.addEventListener("click",()=>_openMomentFromRow(rows[+d.dataset.mi], who)));
-  }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load the chronicle.</span>`; console.warn(e); }
+  try{
+    const [ints,gifts,dates,voices]=await Promise.all([
+      sbGet(`interactions?contact_id=eq.${who.id}&order=on_date.desc,id.desc&limit=40`).catch(()=>[]),
+      sbGet(`gifts?contact_id=eq.${who.id}&order=on_date.desc,id.desc&limit=25`).catch(()=>[]),
+      sbGet(`important_dates?contact_id=eq.${who.id}&order=on_date.desc,id.desc&limit=25`).catch(()=>[]),
+      sbGet(`voice_notes?contact_id=eq.${who.id}&order=id.desc&limit=25`).catch(()=>[])
+    ]);
+    const th=[];
+    (ints||[]).forEach(r=>th.push({d:r.on_date||"", g:CH_META[r.channel]||"•", kind:"int", r,
+      html:`${r.note?esc(r.note):`<span style="color:var(--muted)">${esc(String(r.channel||"").replace(/^./,c=>c.toUpperCase()))}</span>`}`}));
+    (gifts||[]).forEach(r=>th.push({d:r.on_date||"", g:"🎁", kind:"gift", r,
+      html:`<span style="color:#d9c9a4">${r.direction==="given"?"we gave":"we received"}:</span> ${esc(r.item||"a keepsake")}${r.occasion?` <span style="color:var(--muted);font-size:11px">· ${esc(r.occasion)}</span>`:""}`}));
+    (dates||[]).forEach(r=>th.push({d:r.on_date||"", g:_SAC_G[r.kind]||"✦", kind:"sacred", r,
+      html:`<span style="font-style:italic;color:#ecd9a6">${esc(String(r.kind||"day").replace(/^./,c=>c.toUpperCase()))}${r.label?` — ${esc(r.label)}`:""}</span>`}));
+    (voices||[]).forEach(r=>th.push({d:(r.created_at||"").slice(0,10), g:"🎤", kind:"voice", r,
+      html:`<audio controls preload="none" src="${r.url}" style="height:30px;max-width:100%;vertical-align:middle"></audio>${r.seconds?` <span style="font-size:10px;color:var(--muted);font-family:var(--f-data,monospace)">${_mmss(r.seconds)}</span>`:""} <span class="vn-del" data-id="${r.id}" title="Strike this voice" style="cursor:pointer;color:#c07a75;font-size:12px">🗑</span>`}));
+    th.sort((a,b)=>(b.d||"").localeCompare(a.d||""));
+    el.innerHTML = th.length
+      ? `<div style="position:relative;padding-left:22px"><div style="position:absolute;left:7px;top:6px;bottom:6px;width:1px;background:linear-gradient(180deg,rgba(201,162,74,.55),rgba(201,162,74,.08))"></div>`+
+        th.map((x,i)=>`<div class="lt-row" data-i="${i}" style="position:relative;padding:7px 0 7px 6px;${x.kind!=="voice"?"cursor:pointer":""}">
+          <span style="position:absolute;left:-22px;top:8px;width:15px;text-align:center;font-size:12px">${x.g}</span>
+          <div style="color:var(--soft,#cfc9b8);font-size:13px;line-height:1.5">${x.html}</div>
+          <div style="font-size:9.5px;color:var(--muted);font-family:var(--f-data,monospace);margin-top:1px">${x.d?fmtDate(x.d):"—"}</div>
+        </div>`).join("")+`</div>`
+      : `<span style="color:var(--muted)">The thread is unwoven yet — record a call, a gift, a voice, and the life gathers here.</span>`;
+    el.querySelectorAll(".lt-row").forEach(dv=>dv.addEventListener("click",e=>{
+      if(e.target.closest("audio")||e.target.closest(".vn-del"))return;
+      const x=th[+dv.dataset.i]; if(!x)return;
+      if(x.kind==="int")_openMomentFromRow(x.r, who);
+      else if(x.kind==="gift")openMoment({kind:"gift",gid:x.r.id,date:x.r.on_date,icon:"🎁",text:(x.r.direction==="given"?"Gave ":"Received ")+esc(x.r.item||"")+(x.r.occasion?` · ${esc(x.r.occasion)}`:""),pids:[who.id]});
+      else if(x.kind==="sacred")openMoment({kind:"sacred",did:x.r.id,date:x.r.on_date,icon:_SAC_G[x.r.kind]||"✦",text:esc(String(x.r.kind||"").replace(/^./,c=>c.toUpperCase()))+(x.r.label?" — "+esc(x.r.label):""),pids:[who.id]});
+    }));
+    el.querySelectorAll(".vn-del").forEach(x=>x.addEventListener("click",async()=>{ if(!confirm("Strike this voice from the archive for ever?"))return; try{ await sbDelete("voice_notes","id=eq."+x.dataset.id); toast("Struck from the archive"); loadMoments(who); }catch(e){ toast("Couldn’t delete",true); console.warn(e); } }));
+  }catch(e){ el.innerHTML=`<span style="color:var(--muted)">Couldn’t load the thread.</span>`; console.warn(e); }
 }
 async function addGift(who){
   const item=prompt("Keepsake — what was it? (e.g. a leather journal)"); if(!item)return;
   const dir=confirm("Press OK if we GAVE it to them · Cancel if we RECEIVED it")?"given":"received";
   const occasion=prompt("Occasion? (optional, e.g. Christmas 2025)","")||null;
-  try{ await sbInsert("gifts",[{contact_id:who.id, direction:dir, item, occasion, on_date:_today()}]); toast("Keepsake noted ✓"); loadGifts(who); }
+  try{ await sbInsert("gifts",[{contact_id:who.id, direction:dir, item, occasion, on_date:_today()}]); toast("Keepsake noted ✓"); loadMoments(who); }
   catch(e){ toast("Couldn’t save",true); console.warn(e); }
 }
 async function loadGifts(who){
@@ -1577,7 +1661,7 @@ async function uploadVoice(who, blob, seconds){
     if(!r.ok) throw new Error("storage "+(await r.text()));
     const url=`${SUPA.url}/storage/v1/object/public/photos/${path}`;
     await sbInsert("voice_notes",[{contact_id:who.id,url,seconds,note:null}]);
-    toast("Voice note saved ✓"); loadVoiceNotes(who);
+    toast("Voice note saved ✓"); loadMoments(who);
   }catch(err){ toast("Couldn’t save the voice",true); console.warn(err); }
 }
 async function recordVoice(who){
@@ -1724,7 +1808,7 @@ function showCard(p){
   const _cad=p.cadence_days;
   const _cadOpt=(days,label)=>{ const on=(_cad===days||(days===0&&!_cad)); return `<button class="cad-opt" data-cad="${days}" style="border:1px solid ${on?'var(--gold-bright,#E3C786)':'var(--line,#2a2a24)'};background:${on?'rgba(242,236,221,.08)':'transparent'};color:var(--soft,#cfc9b8);font-size:12px;padding:5px 9px;border-radius:8px;cursor:pointer;font-family:inherit">${label}</button>`; };
   const _BS="border:1px solid var(--line,#2a2a24);background:transparent;color:var(--soft,#cfc9b8);font-size:12px;padding:6px 10px;border-radius:8px;cursor:pointer;font-family:inherit";
-  const momentsHTML=`<div class="info-section"><h3>✒ Correspondence</h3>
+  const momentsHTML=`<div class="info-section"><h3>🧵 The Life Thread <span class="edit-link" id="add-gift-btn" style="cursor:pointer;font-size:12px">🎁 ＋</span> <span class="edit-link" id="add-voice-btn" style="cursor:pointer;color:#e0908b;font-size:12px">🎤 ●</span></h3>
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
       <button class="mom-btn" data-ch="call" style="${_BS}">📞 Call</button>
       <button class="mom-btn" data-ch="visit" style="${_BS}">☕ Visit</button>
@@ -1735,8 +1819,6 @@ function showCard(p){
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px">${_cadOpt(30,"Monthly")}${_cadOpt(90,"Quarterly")}${_cadOpt(180,"Twice a year")}${_cadOpt(365,"Yearly")}${_cadOpt(0,"None")}</div>
     <div id="moments-list" style="font-size:12px;color:var(--muted)">Loading the chronicle…</div>
   </div>`;
-  const giftsHTML=`<div class="info-section"><h3>🎁 Keepsakes <span class="edit-link" id="add-gift-btn" style="cursor:pointer">＋ add</span></h3><div id="gifts-list" style="font-size:12px;color:var(--muted)">Loading…</div></div>`;
-  const voiceHTML=`<div class="info-section"><h3>🎤 Voice notes <span class="edit-link" id="add-voice-btn" style="cursor:pointer;color:#e0908b">● record</span></h3><div id="voice-list" style="font-size:12px;color:var(--muted)">Loading…</div></div>`;
   document.getElementById("card-root").innerHTML=`<div class="card-drawer"><button class="back" id="card-x">← Back to the chronicle</button>
     <div class="info-photo">${p.photo?`<img src="${p.photo}" onerror="this.parentNode.innerHTML='👤'">`:"👤"}</div>
     <div style="text-align:center;margin:2px 0 10px"><span class="edit-link" id="photo-btn">📷 ${p.photo?'Change':'Add'} photo</span></div>
@@ -1760,8 +1842,6 @@ function showCard(p){
     ${detailsHTML}
     ${houseHTML}
     ${momentsHTML}
-    ${giftsHTML}
-    ${voiceHTML}
     ${genList("Parents",parents,"👨‍👩")}
     <div class="info-section"><h3>💑 Partner <button class="btn-add" id="edit-partner-btn">${partner?'✎':'＋'}</button></h3>${partner?`<ul class="info-list"><li data-id="${partner.id}">${partner.name}</li></ul>`:`<span style="color:var(--muted);font-size:12px">No partner set</span>`}</div>
     ${genList("Children",children,"👶")}
@@ -1796,7 +1876,7 @@ function showCard(p){
   document.querySelectorAll(".cad-opt").forEach(b=>b.addEventListener("click",()=>setCadence(p,Number(b.dataset.cad))));
   const _agb=document.getElementById("add-gift-btn"); if(_agb)_agb.addEventListener("click",()=>addGift(p));
   const _avb=document.getElementById("add-voice-btn"); if(_avb)_avb.addEventListener("click",()=>recordVoice(p));
-  loadMoments(p); loadGifts(p); loadVoiceNotes(p);
+  loadMoments(p);
   g("add-circle-btn").addEventListener("click",()=>openCirclePicker(p));
   g("edit-nat").addEventListener("click",()=>editNationality(p));
   g("photo-btn").addEventListener("click",()=>pickPhoto(p));
