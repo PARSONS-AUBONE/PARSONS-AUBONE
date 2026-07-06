@@ -785,7 +785,7 @@ let _qs={type:QUILL_TYPES[0],log:false,photoFile:null};
   fileEl.addEventListener("change",()=>{ const f=fileEl.files&&fileEl.files[0]; if(!f)return; _qs.photoFile=f; const u=URL.createObjectURL(f); prev.style.display="block"; prev.innerHTML=`<img src="${u}" style="height:64px;border-radius:10px;border:1px solid rgba(242,236,221,.18);vertical-align:middle"> <span id="q-photorm" style="cursor:pointer;color:#C97F7F;font-size:13px;margin-left:8px">✕ remove</span>`; prev.querySelector("#q-photorm").addEventListener("click",()=>{ _qs.photoFile=null; fileEl.value=""; prev.style.display="none"; prev.innerHTML=""; }); });
   ov.addEventListener("mousedown",e=>{ if(e.target===ov)closeQuill(); });
   ov.querySelector("#q-save").addEventListener("click",qSave);
-  window.openQuill=function(prefill){ ov.style.display="flex"; _qs={type:quillTypes()[0],log:false,photoFile:null}; ed.innerHTML=""; dateEl.value=""; dateOk.textContent=""; prev.style.display="none"; prev.innerHTML=""; fileEl.value=""; chipTxt(); badge(); showPh(); closeAc(); setTimeout(()=>{ ed.focus(); if(prefill&&prefill.id){ try{ const s=window.getSelection(); const r=document.createRange(); r.selectNodeContents(ed); r.collapse(false); s.removeAllRanges(); s.addRange(r); insertChip(prefill); }catch(_){ } } },0); };
+  window.openQuill=function(prefill){ ov.style.display="flex"; _qs={type:quillTypes()[0],log:false,photoFile:null}; ed.innerHTML=""; dateEl.value=""; dateOk.textContent=""; prev.style.display="none"; prev.innerHTML=""; fileEl.value=""; chipTxt(); badge(); showPh(); closeAc(); setTimeout(()=>{ ed.focus(); if(prefill&&prefill.id){ try{ const s=window.getSelection(); const r=document.createRange(); r.selectNodeContents(ed); r.collapse(false); s.removeAllRanges(); s.addRange(r); insertChip(prefill); }catch(_){ } } else if(typeof prefill==="string"&&prefill.trim()){ try{ document.execCommand("insertText",false,prefill.trim()); ed.dispatchEvent(new Event("input",{bubbles:true})); }catch(_){ } } },0); };
   window.closeQuill=function(){ ov.style.display="none"; closeAc(); };
   function _qSer(withM){ let out=""; ed.childNodes.forEach(n=>{ if(n.nodeType===3)out+=n.textContent; else if(n.classList&&n.classList.contains("qchip")){ if(withM)out+=n.textContent; } else if(n.nodeName==="BR")out+=" "; else out+=(n.textContent||""); }); return out.replace(/ /g," ").replace(/ß(DATE|date)?/g,"").replace(/\s+/g," ").trim(); }
   async function qSave(){
@@ -844,11 +844,82 @@ let _qs={type:QUILL_TYPES[0],log:false,photoFile:null};
     }catch(e){ toast("It could not be inscribed",true); console.warn(e); }
     finally{ btn.disabled=false; }
   }
-  document.addEventListener("keydown",e=>{ if(e.key==="ß"){ const t=e.target; const typing=t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.isContentEditable); if(!typing){ e.preventDefault(); openQuill(); } } });
-  const fab=document.createElement("div"); fab.id="quill-fab"; fab.textContent="✒️"; fab.title="The Quill (ß)";
+  document.addEventListener("keydown",e=>{ if(e.key==="ß"){ const t=e.target; const typing=t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.isContentEditable); if(!typing){ e.preventDefault(); (window.openPalette||openQuill)(); } } });
+  const fab=document.createElement("div"); fab.id="quill-fab"; fab.textContent="✒️"; fab.title="The ß — summon a soul, a view, or write";
   fab.style.cssText="position:fixed;right:18px;bottom:"+(document.getElementById("mode-toggle")?"178px":"20px")+";z-index:48;background:rgba(12,13,10,.85);backdrop-filter:blur(10px);border:1px solid rgba(199,162,76,.55);color:#E3C786;font-size:17px;padding:10px 13px;border-radius:12px;cursor:pointer;box-shadow:0 8px 30px rgba(0,0,0,.5)";
-  fab.addEventListener("click",()=>openQuill());
+  fab.addEventListener("click",()=>{ (window.openPalette||openQuill)(); });
   document.body.appendChild(fab);
+})();
+
+/* ── The ß — a palette to summon any soul, view or day, and to write ── */
+(function(){
+  if(window.__bpalInstalled)return; window.__bpalInstalled=true;
+  const ov=document.createElement("div"); ov.id="bpal";
+  ov.style.cssText="position:fixed;inset:0;z-index:9600;display:none;align-items:flex-start;justify-content:center;background:rgba(6,7,5,.6);backdrop-filter:blur(8px)";
+  ov.innerHTML=`<div id="bp-sheet" style="margin-top:11vh;width:min(600px,94vw);background:rgba(15,17,13,.99);border:1px solid rgba(201,162,74,.28);border-radius:18px;box-shadow:0 40px 110px rgba(0,0,0,.7);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:12px;padding:15px 20px;border-bottom:1px solid rgba(242,236,221,.08)">
+      <span style="font-family:'EB Garamond',Georgia,serif;font-style:italic;font-size:25px;color:#C7A24C;line-height:1">ß</span>
+      <input id="bp-in" type="text" autocomplete="off" spellcheck="false" placeholder="Summon a soul, leap to a view — or write…" style="flex:1;background:transparent;border:0;outline:0;color:#EFE9D8;font-family:'EB Garamond',serif;font-size:19px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8b8676;letter-spacing:.1em">esc</span>
+    </div>
+    <div id="bp-res" style="max-height:56vh;overflow-y:auto;padding:6px"></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const inp=ov.querySelector("#bp-in"), res=ov.querySelector("#bp-res");
+  let items=[], sel=0;
+  const VIEWS=[
+    {g:"☀",label:"Today — who to greet",sub:"the day's reach-outs",go:()=>gotoTab("today")},
+    {g:"✦",label:"The Map",sub:"souls & their bonds",go:()=>{location.href="map.html";}},
+    {g:"✒",label:"The Journal",sub:"the living chronicle",go:()=>gotoTab("journal")},
+    {g:"❉",label:"At a Glance",sub:"the House in one look",go:()=>gotoTab("overview")},
+    {g:"🌍",label:"The Atlas",sub:"souls on the globe",go:()=>gotoTab("atlas")},
+    {g:"🖼",label:"The Album",sub:"photographs & stories",go:()=>gotoTab("album")},
+    {g:"🎂",label:"Birthdays",sub:"the year's candles",go:()=>gotoTab("calendar")},
+    {g:"💍",label:"Anniversaries",sub:"",go:()=>gotoTab("anniversaries")},
+    {g:"🕮",label:"The Roll",sub:"allergies & care",go:()=>gotoTab("health")},
+    {g:"⭐",label:"Circles",sub:"the groups of the House",go:()=>gotoTab("circles")},
+    {g:"🧭",label:"Horizons",sub:"the cities of the House",go:()=>gotoTab("horizons")},
+    {g:"☾",label:"My page",sub:"your own thread",go:()=>{ try{openMyPage();}catch(_){ } }},
+    {g:"🕯",label:"The Vigil",sub:"the House breathes",go:()=>{ try{vigilStart();}catch(_){ } }}
+  ];
+  const avatar=(p)=>{ if(p.photo) return `<span style="width:27px;height:27px;border-radius:50%;background:url('${p.photo}') center/cover;border:1px solid rgba(201,162,74,.5);flex:0 0 auto"></span>`;
+    const ini=(p.name||"?").trim().split(/\s+/).map(w=>w[0]||"").slice(0,2).join("").toUpperCase();
+    return `<span style="width:27px;height:27px;border-radius:50%;background:#20241a;border:1px solid rgba(201,162,74,.4);display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:11px;color:#C7A24C;flex:0 0 auto">${esc(ini)}</span>`; };
+  function build(q){
+    const nq=_qNorm(q); items=[];
+    if(!nq){
+      items.push({g:"✒",label:"Write an entry",sub:"# type · @ soul · ßDATE for the log",act:()=>{ closeP(); openQuill(); }});
+      const def=[["☀","Today — who to greet","the day's reach-outs","today"],["✦","The Map","souls & their bonds","__map"],["✒","The Journal","the living chronicle","journal"],["☾","My page","your own thread","__me"],["🕯","The Vigil","the House breathes","__vigil"]];
+      def.forEach(d=>items.push({g:d[0],label:d[1],sub:d[2],act:()=>{ closeP(); if(d[3]==="__map")location.href="map.html"; else if(d[3]==="__me"){ try{openMyPage();}catch(_){ } } else if(d[3]==="__vigil"){ try{vigilStart();}catch(_){ } } else gotoTab(d[3]); }}));
+    } else {
+      PEOPLE.filter(p=>{ const n=_qNorm(p.name); return n.includes(nq)||n.split(/\s+/).some(w=>w.startsWith(nq)); }).slice(0,6)
+        .forEach(p=>items.push({avatar:p,label:p.name,sub:p.household||p.role||"a soul of the House",act:()=>{ closeP(); showCard(p); }}));
+      VIEWS.filter(v=>_qNorm(v.label).includes(nq)||_qNorm(v.sub).includes(nq)).slice(0,4)
+        .forEach(v=>items.push({g:v.g,label:v.label,sub:v.sub,act:()=>{ closeP(); v.go(); }}));
+      items.push({g:"✒",label:`Write “${q.trim()}”`,sub:"inscribe it in the chronicle",act:()=>{ closeP(); openQuill(q.trim()); }});
+      if(nq.length>1&&!PEOPLE.some(p=>_qNorm(p.name)===nq)) items.push({g:"＋",label:`Add “${q.trim()}” to the House`,sub:"a new soul",act:async()=>{ closeP(); try{ const p=await createSoul(q.trim()); showCard(p); }catch(e){ toast("Couldn’t add them",true); console.warn(e); } }});
+    }
+    sel=0; render();
+  }
+  function render(){
+    res.innerHTML=items.map((it,i)=>`<div class="bp-opt" data-i="${i}" style="display:flex;align-items:center;gap:12px;padding:10px 13px;border-radius:11px;cursor:pointer;background:${i===sel?'rgba(201,162,74,.1)':'transparent'}">
+      ${it.avatar?avatar(it.avatar):`<span style="width:27px;height:27px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex:0 0 auto;color:#C7A24C">${it.g||"·"}</span>`}
+      <span style="flex:1;min-width:0"><span style="display:block;font-family:'EB Garamond',serif;font-size:16.5px;color:#EFE9D8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(it.label)}</span>${it.sub?`<span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#8b8676;letter-spacing:.02em">${esc(it.sub)}</span>`:""}</span>
+      ${i===sel?`<span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#C7A24C">↵</span>`:""}
+    </div>`).join("")||`<div style="padding:18px;text-align:center;color:#8b8676;font-family:'EB Garamond',serif;font-style:italic">Nothing by that name yet.</div>`;
+    res.querySelectorAll(".bp-opt").forEach(o=>{ o.addEventListener("mousedown",e=>{ e.preventDefault(); const it=items[+o.dataset.i]; if(it&&it.act)it.act(); }); o.addEventListener("mouseover",()=>{ sel=+o.dataset.i; render(); }); });
+  }
+  function openP(){ ov.style.display="flex"; inp.value=""; build(""); setTimeout(()=>inp.focus(),0); }
+  function closeP(){ ov.style.display="none"; }
+  window.openPalette=openP; window.closePalette=closeP;
+  inp.addEventListener("input",()=>build(inp.value));
+  inp.addEventListener("keydown",e=>{
+    if(e.key==="ArrowDown"){ e.preventDefault(); sel=Math.min(sel+1,items.length-1); render(); }
+    else if(e.key==="ArrowUp"){ e.preventDefault(); sel=Math.max(sel-1,0); render(); }
+    else if(e.key==="Enter"){ e.preventDefault(); const it=items[sel]; if(it&&it.act)it.act(); }
+    else if(e.key==="Escape"){ e.preventDefault(); closeP(); }
+  });
+  ov.addEventListener("mousedown",e=>{ if(e.target===ov)closeP(); });
 })();
 
 function openMoment(e){
@@ -863,10 +934,11 @@ function openMoment(e){
       <div style="font-family:'EB Garamond',serif;font-size:17px;line-height:1.65;${e.milestone?"font-style:italic;color:#ecd9a6":"color:var(--soft)"}">${e.milestone?_hlMentions(e.note):(e.text||"")}</div>
       ${who.length?`<div style="margin-top:16px"><div style="font-family:var(--f-ui);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Souls present</div><div style="display:flex;flex-wrap:wrap;gap:6px">${who.map(p=>`<span class="mo-p" data-mid="${p.id}" style="border:1px solid var(--line);border-radius:9px;padding:4px 10px;font-size:13px;cursor:pointer;color:var(--soft)">${p.name}</span>`).join("")}</div></div>`:""}
     </div>
-    <div class="picker-foot" style="display:flex;justify-content:space-between;align-items:center"><button class="tab" id="mo-del" style="border:1px solid rgba(164,84,79,.6);color:#e0908b">🗑 Delete this entry</button><button class="tab" id="mo-x">Close</button></div></div>`;
+    <div class="picker-foot" style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;gap:8px"><button class="tab" id="mo-edit" style="border:1px solid rgba(201,162,74,.55);color:var(--accent)">✎ Edit</button><button class="tab" id="mo-del" style="border:1px solid rgba(164,84,79,.6);color:#e0908b">🗑 Delete</button></div><button class="tab" id="mo-x">Close</button></div></div>`;
   document.body.appendChild(ov); const close=()=>ov.remove();
   ov.addEventListener("click",x=>{ if(x.target===ov)close(); });
   ov.querySelector("#mo-x").addEventListener("click",close);
+  { const _eb=ov.querySelector("#mo-edit"); if(_eb)_eb.addEventListener("click",()=>_editMoment(e, ov, close)); }
   ov.querySelectorAll(".mo-p").forEach(el=>el.addEventListener("click",()=>{ close(); const p=PEOPLE.find(q=>q.id==el.dataset.mid); if(p)showCard(p); }));
   ov.querySelector("#mo-del").addEventListener("click",async()=>{ if(!confirm("Strike this entry from the chronicle for ever?"))return; close();
     try{
@@ -877,6 +949,43 @@ function openMoment(e){
       try{ if(typeof activeTab!=="undefined"&&activeTab==="journal")renderJournal(); }catch(_){ }
       try{ if(currentPerson){ loadMoments(currentPerson); loadGifts(currentPerson); } }catch(_){ }
     }catch(err){ toast("Couldn’t delete",true); console.warn(err); } });
+}
+async function _editMoment(e, ov, closeAll){
+  const picker=ov.querySelector(".picker"); if(!picker)return;
+  let fields, dateVal=e.date||_today();
+  if(e.kind==="gift"){
+    let row={}; try{ row=(await sbGet("gifts?id=eq."+e.gid+"&select=item,occasion,on_date"))[0]||{}; }catch(_){ }
+    if(row.on_date)dateVal=row.on_date;
+    fields=[{k:"item",label:"What it was",val:row.item||""},{k:"occasion",label:"Occasion",val:row.occasion||""}];
+  } else if(e.kind==="sacred"){
+    let row={}; try{ row=(await sbGet("important_dates?id=eq."+e.did+"&select=label,on_date"))[0]||{}; }catch(_){ }
+    if(row.on_date)dateVal=row.on_date;
+    fields=[{k:"label",label:"What it marks",val:row.label||""}];
+  } else {
+    fields=[{k:"note",label:"The words",val:e.note||"",multi:true}];
+  }
+  picker.innerHTML=`<div class="picker-head"><h3 style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">✎</span> Amend this entry</h3></div>
+    <div style="padding:12px 4px 4px;max-height:60vh;overflow-y:auto">
+      ${fields.map(f=>`<div style="margin-bottom:14px"><div style="font-family:var(--f-ui);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">${f.label}</div>${f.multi?`<textarea id="ed-${f.k}" rows="4" style="${_IN};resize:vertical;font-family:'EB Garamond',serif;font-size:15.5px;line-height:1.55">${esc(f.val)}</textarea>`:`<input id="ed-${f.k}" type="text" value="${esc(f.val)}" style="${_IN}">`}</div>`).join("")}
+      <div><div style="font-family:var(--f-ui);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">On the day</div><input id="ed-date" type="date" value="${dateVal||""}" style="${_IN}"></div>
+    </div>
+    <div class="picker-foot" style="display:flex;justify-content:space-between"><button class="tab" id="ed-cancel">Cancel</button><button class="tab" id="ed-save" style="border:1px solid var(--accent);color:var(--accent)">Save the amendment</button></div>`;
+  const g=k=>{ const el=picker.querySelector("#ed-"+k); return el?el.value.trim():undefined; };
+  picker.querySelector("#ed-cancel").addEventListener("click",closeAll);
+  picker.querySelector("#ed-save").addEventListener("click",async()=>{
+    const nd=g("date")||null; closeAll();
+    try{
+      if(e.kind==="gift"){ await sbPatch("gifts","id",e.gid,{item:g("item")||null,occasion:g("occasion")||null,on_date:nd}); }
+      else if(e.kind==="sacred"){ await sbPatch("important_dates","id",e.did,{label:g("label")||null,on_date:nd}); }
+      else if(e.ids&&e.ids.length){
+        const r=await fetch(`${SUPA.url}/rest/v1/interactions?id=in.(${e.ids.join(",")})`,{method:"PATCH",headers:{...sbH(),Prefer:"return=minimal"},body:JSON.stringify({note:g("note")||null,on_date:nd})});
+        if(!r.ok)throw new Error(await r.text());
+      } else { toast("Nothing to amend here",true); return; }
+      toast("The chronicle is amended");
+      try{ if(typeof activeTab!=="undefined"&&activeTab==="journal")renderJournal(); }catch(_){ }
+      try{ if(currentPerson){ loadMoments(currentPerson); loadGifts(currentPerson); } }catch(_){ }
+    }catch(err){ toast("Couldn’t save the change",true); console.warn(err); }
+  });
 }
 function _hlMentions(note){ let out=esc(note); [...PEOPLE].sort((a,b)=>(b.name||"").length-(a.name||"").length).forEach(p=>{ if(!p.name)return; const tag=esc("@"+p.name); if(out.indexOf(tag)>=0){ out=out.split(tag).join(`<span class="row-link" data-pid="${p.id}" style="color:var(--accent);font-weight:600">@${esc(p.name)}</span>`); } }); return out; }
 function _wireComposer(){
@@ -1484,7 +1593,7 @@ async function recordVoice(who){
   mr.ondataavailable=e=>{ if(e.data&&e.data.size)chunks.push(e.data); };
   const ov=document.createElement("div"); ov.className="picker-overlay";
   ov.innerHTML=`<div class="picker" style="width:360px;max-width:92vw;text-align:center">
-    <div class="picker-head"><h3>\U0001F3A4 A voice for ${esc(who.name)}</h3></div>
+    <div class="picker-head"><h3>🎤 A voice for ${esc(who.name)}</h3></div>
     <div style="padding:24px 4px 10px">
       <div style="width:66px;height:66px;border-radius:50%;background:#b8443f;margin:0 auto 16px;animation:vrpulse 1.25s infinite"></div>
       <div id="vr-time" style="font-family:var(--f-data,monospace);font-size:24px;color:var(--soft)">0:00</div>
