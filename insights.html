@@ -508,7 +508,7 @@ function renderHome(){
   window._rdOff=window._rdOff||0;
   const rd=pool.length?pool[(doy+window._rdOff)%pool.length]:null;
 
-  const row=(p,sub,extra)=>`<div class="bday-row">${avatar(p)}<div style="flex:1;min-width:0"><div style="font-weight:600"><span class="row-link" data-pid="${p.id}">${p.name}</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--f-data);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div></div>${extra||""}</div>`;
+  const row=(p,sub,extra)=>{ const u=_pulse(p); return `<div class="bday-row">${avatar(p)}<div style="flex:1;min-width:0"><div style="font-weight:600"><span class="row-link" data-pid="${p.id}">${p.name}</span> <span title="${u.label}" style="font-size:10px">${u.g}</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--f-data);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div></div>${extra||""}</div>`; };
   const quillBtn=p=>`<span class="edit-link" data-rollquill="${p.id}" title="Record that you reached out">✒️</span>`;
 
   C.innerHTML=`<div class="grid">
@@ -1568,6 +1568,19 @@ async function editHouseField(p, col, label, kind){
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"&&kind!=='multiline')save(inp.value); });
 }
 
+function _pulse(p){
+  if(!p||!p.last_contact) return {g:"🌑",label:"Unlit",col:"#8b8676",detail:"no word recorded yet"};
+  const days=Math.floor((Date.now()-new Date(p.last_contact))/86400000);
+  const cad=p.cadence_days||180, r=days/cad;
+  const ago=days===0?"today":days===1?"yesterday":days<60?days+" days ago":Math.round(days/30)+" months ago";
+  if(r<0.5)  return {g:"🔥",label:"Blazing",col:"#E9CE8E",detail:"last word "+ago};
+  if(r<1)    return {g:"🕯",label:"Warm",col:"#C9A24A",detail:"last word "+ago};
+  if(r<2)    return {g:"🌒",label:"Cooling",col:"#C8945B",detail:"last word "+ago};
+  return {g:"🌘",label:"Embers",col:"#A67B4F",detail:"quiet for "+ago.replace(" ago","")};
+}
+function _pulseChip(p){ const u=_pulse(p);
+  return `<span id="pulse-chip" title="The pulse of this bond — from the last word and the desired cadence" style="display:inline-flex;align-items:center;gap:6px;font-family:var(--f-data,monospace);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:${u.col};border:1px solid ${u.col}55;border-radius:20px;padding:3px 11px;margin-top:6px">${u.g} ${u.label} <span style="color:var(--muted);text-transform:none;letter-spacing:.02em">· ${u.detail}</span></span>`;
+}
 function coolOf(x){ if(!x||!x.last_contact)return false; const days=Math.floor((Date.now()-new Date(x.last_contact))/86400000); return days>(x.cadence_days||180); }
 function _today(){ const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; }
 const CH_META={call:"📞",visit:"☕",message:"✉️",letter:"✍️",email:"✉️",gathering:"🎉",milestone:"✦",log:"🕯",other:"•"};
@@ -1616,6 +1629,7 @@ async function loadMoments(who){
           <div style="font-size:9.5px;color:var(--muted);font-family:var(--f-data,monospace);margin-top:1px">${x.d?fmtDate(x.d):"—"}</div>
         </div>`).join("")+`</div>`
       : `<span style="color:var(--muted)">The thread is unwoven yet — record a call, a gift, a voice, and the life gathers here.</span>`;
+    try{ const ch=document.getElementById("pulse-chip"); if(ch&&th.length){ const n=th.length; if(!/woven/.test(ch.textContent)) ch.insertAdjacentHTML("beforeend",`<span style="color:var(--muted);text-transform:none;letter-spacing:.02em"> · ${n} moment${n===1?"":"s"} woven</span>`); } }catch(_){ }
     el.querySelectorAll(".lt-row").forEach(dv=>dv.addEventListener("click",e=>{
       if(e.target.closest("audio")||e.target.closest(".vn-del"))return;
       const x=th[+dv.dataset.i]; if(!x)return;
@@ -1823,7 +1837,7 @@ function showCard(p){
     <div class="info-photo">${p.photo?`<img src="${p.photo}" onerror="this.parentNode.innerHTML='👤'">`:"👤"}</div>
     <div style="text-align:center;margin:2px 0 10px"><span class="edit-link" id="photo-btn">📷 ${p.photo?'Change':'Add'} photo</span></div>
     <div class="info-name">${p.name} <span class="edit-link" id="edit-name-btn" title="Edit name" style="font-size:12px">✎</span>${p.nickname?` <span style="color:var(--muted);font-size:14px;font-weight:400">("${p.nickname}")</span>`:""}</div>
-    <div class="info-meta">${[p.role,p.circle.label,p.closeness.label].filter(Boolean).join(" · ")}</div>
+    <div class="info-meta">${[p.role,p.circle.label,p.closeness.label].filter(Boolean).join(" · ")}</div>\n    <div style="text-align:center">${_pulseChip(p)}</div>
     ${p.household?`<div class="info-meta" style="margin-top:-2px">🏠 ${p.household}</div>`:""}
     <div class="info-section" style="border-top:none;padding-top:0"><h3>Belongs to <button class="btn-add" id="add-circle-btn">＋</button></h3><div class="info-tags">${circlePills||'<span style="color:var(--muted);font-size:12px">No circles yet · tap ＋</span>'}</div></div>
     <div class="info-section"><h3>📖 Story <span class="edit-link" data-col="long_text_mm3vwd7g" data-label="Story" data-multi="1">✎</span></h3><div style="font-size:13px;line-height:1.6;white-space:pre-wrap">${p.story?p.story.replace(/\n/g,"<br>"):`<span style="color:var(--muted)">—</span>`}</div></div>

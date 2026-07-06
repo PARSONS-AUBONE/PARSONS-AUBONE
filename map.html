@@ -1367,7 +1367,7 @@ function selectPerson(d){
     <div class="info-photo">${d.photo?`<img src="${d.photo}" onerror="this.parentNode.innerHTML='👤'" alt="">`:"👤"}</div>
     <div style="text-align:center;margin:-8px 0 10px"><span class="edit-link" id="photo-btn">📷 ${d.photo?'Change':'Add'} photo</span></div>
     <div class="info-name">${d.name} <span class="edit-link" id="edit-name-btn" title="Edit name" style="font-size:12px">✎</span>${d.nickname?` <span style="color:var(--muted);font-size:14px;font-weight:400">("${d.nickname}")</span>`:""}</div>
-    <div class="info-meta">${[d.role,d.circle.label,d.closeness.label].filter(Boolean).join(" · ")}</div>
+    <div class="info-meta">${[d.role,d.circle.label,d.closeness.label].filter(Boolean).join(" · ")}</div>\n    <div style="text-align:center">${_pulseChip(d)}</div>
     ${d.household?`<div class="info-meta" style="margin-top:-4px">🏠 ${d.household}</div>`:""}
     <div class="info-section" style="border-top:none;padding-top:0"><h3>Belongs to <button class="btn-add" id="add-circle-btn" title="Add to a circle">＋</button></h3><div class="info-tags">${circlePills}${tagPills}${(!circlePills&&!tagPills)?'<span style="color:var(--muted);font-size:12px">No circles yet · tap ＋</span>':''}</div></div>
     ${storyHTML}
@@ -1944,6 +1944,19 @@ async function editHouseField(d, col, label, kind){
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"&&kind!=='multiline')save(inp.value); });
 }
 
+function _pulse(p){
+  if(!p||!p.last_contact) return {g:"🌑",label:"Unlit",col:"#8b8676",detail:"no word recorded yet"};
+  const days=Math.floor((Date.now()-new Date(p.last_contact))/86400000);
+  const cad=p.cadence_days||180, r=days/cad;
+  const ago=days===0?"today":days===1?"yesterday":days<60?days+" days ago":Math.round(days/30)+" months ago";
+  if(r<0.5)  return {g:"🔥",label:"Blazing",col:"#E9CE8E",detail:"last word "+ago};
+  if(r<1)    return {g:"🕯",label:"Warm",col:"#C9A24A",detail:"last word "+ago};
+  if(r<2)    return {g:"🌒",label:"Cooling",col:"#C8945B",detail:"last word "+ago};
+  return {g:"🌘",label:"Embers",col:"#A67B4F",detail:"quiet for "+ago.replace(" ago","")};
+}
+function _pulseChip(p){ const u=_pulse(p);
+  return `<span id="pulse-chip" title="The pulse of this bond — from the last word and the desired cadence" style="display:inline-flex;align-items:center;gap:6px;font-family:var(--f-data,monospace);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:${u.col};border:1px solid ${u.col}55;border-radius:20px;padding:3px 11px;margin-top:6px">${u.g} ${u.label} <span style="color:var(--muted);text-transform:none;letter-spacing:.02em">· ${u.detail}</span></span>`;
+}
 function coolOf(x){ if(!x||!x.last_contact)return false; const days=Math.floor((Date.now()-new Date(x.last_contact))/86400000); return days>(x.cadence_days||180); }
 function _today(){ const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; }
 const CH_META={call:"📞",visit:"☕",message:"✉️",letter:"✍️",email:"✉️",gathering:"🎉",milestone:"✦",log:"🕯",other:"•"};
