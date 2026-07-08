@@ -6,7 +6,7 @@
 <style>
   :root{
     --ink:#0C0E0B; --ink-2:#14160F; --panel:rgba(18,20,14,.78); --raise:rgba(26,28,20,.9);
-    --ivory:#F2ECDD; --text:#F2ECDD; --soft:rgba(242,236,221,.74); --muted:rgba(242,236,221,.55); --muted-2:rgba(242,236,221,.34);
+    --ivory:#F2ECDD; --text:#F2ECDD; --soft:rgba(242,236,221,.74); --muted:rgba(242,236,221,.62); --muted-2:rgba(242,236,221,.50);
     --gold:#CBAA6A; --gold-bright:#E3C786; --gold-deep:#9A7B3F; --gold-wash:rgba(203,170,106,.14);
     --line:rgba(203,170,106,.16); --line-2:rgba(203,170,106,.30);
     --accent:#CBAA6A; --danger:#D8788A; --warning:#E0A458; --success:#7FB59B; --border:rgba(203,170,106,.16); --panel-2:rgba(242,236,221,.05);
@@ -14,6 +14,9 @@
     --f-disp:"Cinzel",serif; --f-ui:"Manrope",system-ui,sans-serif; --f-prose:"EB Garamond",Georgia,serif; --f-data:"IBM Plex Mono",ui-monospace,monospace;
     --ease:cubic-bezier(.22,1,.36,1); --shadow:0 24px 60px -22px rgba(0,0,0,.7); }
   *{box-sizing:border-box}
+  ::selection{ background:rgba(203,170,106,.28); color:#F2ECDD }
+  :focus-visible{ outline:2px solid var(--gold-bright,#E3C786); outline-offset:2px; border-radius:3px }
+  html{ text-rendering:optimizeLegibility; -moz-osx-font-smoothing:grayscale; -webkit-font-smoothing:antialiased }
   body{ margin:0; font-family:var(--f-ui); background:var(--ink); color:var(--text); -webkit-font-smoothing:antialiased; min-height:100vh; }
   .cinema{ position:fixed; inset:0; z-index:0; overflow:hidden; }
   .cinema .pl{ position:absolute; inset:0; background-size:cover; background-position:center; opacity:0; transition:opacity 3s ease-in-out; transform:scale(1.06); animation:kb 40s ease-in-out infinite alternate; }
@@ -482,6 +485,14 @@ async function _fillOnThisDay(){
       return `<div style="display:flex;gap:11px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:16px">${h.icon}</span><div style="flex:1"><div style="font-family:'EB Garamond',serif;font-size:15px;color:var(--soft)">${who}${h.text}</div>${ph}<div style="font-family:var(--f-data);font-size:10px;color:#C8945B;letter-spacing:.08em;margin-top:2px">${h.y===1?"A YEAR AGO TODAY":h.y+" YEARS AGO TODAY"}</div></div></div>`; }).join("");
   }catch(_){ el.style.display="none"; }
 }
+async function _enrichHearthCtx(){
+  const spans=[...document.querySelectorAll("#content .hctx[data-ctx]")]; if(!spans.length)return;
+  try{
+    const rows=await sbGet("interactions?select=contact_id,note,on_date&note=not.is.null&order=on_date.desc,id.desc&limit=600");
+    const last={}; (rows||[]).forEach(r=>{ const id=r.contact_id; if(id!=null && last[id]===undefined && r.note) last[id]=r.note; });
+    spans.forEach(sp=>{ const n=last[sp.dataset.ctx]; if(n){ const t=String(n).replace(/<[^>]*>/g," ").replace(/@/g,"").replace(/\s+/g," ").trim(); if(t) sp.textContent="“"+(t.length>54?t.slice(0,54)+"…":t)+"”"; } });
+  }catch(_){ }
+}
 function renderHome(){
   const C=document.getElementById("content");
   const h=new Date().getHours();
@@ -508,7 +519,7 @@ function renderHome(){
   window._rdOff=window._rdOff||0;
   const rd=pool.length?pool[(doy+window._rdOff)%pool.length]:null;
 
-  const row=(p,sub,extra)=>{ const u=_pulse(p); return `<div class="bday-row">${avatar(p)}<div style="flex:1;min-width:0"><div style="font-weight:600"><span class="row-link" data-pid="${p.id}">${p.name}</span> <span title="${u.label}" style="font-size:10px">${u.g}</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--f-data);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div></div>${extra||""}</div>`; };
+  const row=(p,sub,extra)=>{ const u=_pulse(p); return `<div class="bday-row">${avatar(p)}<div style="flex:1;min-width:0"><div style="font-weight:600"><span class="row-link" data-pid="${p.id}">${p.name}</span> <span title="${u.label}" style="font-size:10px">${u.g}</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--f-data);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</div><div class="hctx" data-ctx="${p.id}" style="font-size:11.5px;color:#8b8676;font-family:'EB Garamond',serif;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px"></div></div>${extra||""}</div>`; };
   const quillBtn=p=>`<span class="edit-link" data-rollquill="${p.id}" title="Record that you reached out">✒️</span>`;
 
   C.innerHTML=`<div class="grid">
@@ -533,6 +544,7 @@ function renderHome(){
   </div>`;
   const bb=document.getElementById("hearth-b"); if(bb)bb.addEventListener("click",()=>{ if(typeof openPalette==="function")openPalette(); });
   const sh=document.getElementById("rd-shuffle"); if(sh)sh.addEventListener("click",()=>{ window._rdOff=(window._rdOff||0)+1; renderHome(); });
+  try{ _enrichHearthCtx(); }catch(_){ }
 }
 function renderToday(){
   const C=document.getElementById("content");

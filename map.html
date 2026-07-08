@@ -22,7 +22,7 @@
 <style>
   :root{
     --ink:#0C0E0B; --ink-2:#14160F; --panel:rgba(18,20,14,.74); --raise:rgba(26,28,20,.9);
-    --ivory:#F2ECDD; --text:#F2ECDD; --soft:rgba(242,236,221,.74); --muted:rgba(242,236,221,.55); --muted-2:rgba(242,236,221,.34);
+    --ivory:#F2ECDD; --text:#F2ECDD; --soft:rgba(242,236,221,.74); --muted:rgba(242,236,221,.62); --muted-2:rgba(242,236,221,.50);
     --gold:#CBAA6A; --gold-bright:#E3C786; --gold-deep:#9A7B3F;
     --line:rgba(203,170,106,.16); --line-2:rgba(203,170,106,.30);
     --danger:#D8788A; --accent:#CBAA6A;
@@ -30,6 +30,9 @@
     --ease:cubic-bezier(.22,1,.36,1); --shadow:0 24px 60px -22px rgba(0,0,0,.7);
   }
   *{box-sizing:border-box}
+  ::selection{ background:rgba(203,170,106,.28); color:#F2ECDD }
+  :focus-visible{ outline:2px solid var(--gold-bright,#E3C786); outline-offset:2px; border-radius:3px }
+  html{ text-rendering:optimizeLegibility; -moz-osx-font-smoothing:grayscale; -webkit-font-smoothing:antialiased }
   html,body{height:100%}
   body{ margin:0; font-family:var(--f-ui); color:var(--text); background:var(--ink); overflow:hidden; -webkit-font-smoothing:antialiased; }
   /* the five plates, in penumbra, breathing behind everything */
