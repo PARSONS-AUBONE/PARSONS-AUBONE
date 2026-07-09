@@ -596,7 +596,8 @@ function openConnectModal(a,b){
       <button class="toggle cn" data-act="partner" style="padding:14px;font-size:15px;text-align:left">💍 &nbsp;${esc(a.name)} is the <strong>partner</strong> of ${esc(b.name)}</button>
       <button class="toggle cn" data-act="a_child" style="padding:14px;font-size:15px;text-align:left">👶 &nbsp;${esc(a.name)} is a <strong>child</strong> of ${esc(b.name)}</button>
       <button class="toggle cn" data-act="b_child" style="padding:14px;font-size:15px;text-align:left">👶 &nbsp;${esc(b.name)} is a <strong>child</strong> of ${esc(a.name)}</button>
-      <button class="toggle cn" data-act="circle" style="padding:14px;font-size:15px;text-align:left">⭐ &nbsp;They <strong>share a circle</strong></button>
+      <button class="toggle cn" data-act="sibling" style="padding:14px;font-size:15px;text-align:left">👫 &nbsp;${esc(a.name)} &amp; ${esc(b.name)} are <strong>siblings</strong></button>
+      <button class="toggle cn" data-act="circle" style="padding:14px;font-size:15px;text-align:left">⭐ &nbsp;They <strong>share a circle</strong> <span style="color:var(--muted);font-size:12px">(friends, a club…)</span></button>
     </div>
     <div class="picker-foot"><button class="toggle" id="cn-x">Cancel</button></div></div>`;
   document.body.appendChild(ov);
@@ -607,6 +608,7 @@ function openConnectModal(a,b){
     try{ if(act==="partner") await setPartner(a.id,b.id);
       else if(act==="a_child") await addChild(b.id,a.id);
       else if(act==="b_child") await addChild(a.id,b.id);
+      else if(act==="sibling") await makeSiblings(a,b);
       else if(act==="circle") openShareCircle(a,b);
     }catch(e){ toast("Couldn’t save",true); console.warn(e); }
   }));
@@ -1056,7 +1058,11 @@ async function _savePins(nodes){ if(_lineage)return;
   for(const r of rows){ try{ await sbPatch("contacts","id",r.id,{map_x:r.x,map_y:r.y}); }
     catch(e){ if(!window.__pinWarn){ window.__pinWarn=true; toast("Pinned on this device — run 05_positions.sql to keep it on every device",true); } break; } }
 }
-cy.on("dragfree","node",e=>{ try{ _savePins(cy.$("node:selected").union(e.target)); }catch(_){ } });
+cy.on("dragfree","node",e=>{ const nd=e.target;
+  try{ if(!_lineage){ const pos=nd.position(); let tgt=null,best=Infinity;
+    cy.nodes().forEach(n=>{ if(n.same(nd))return; const bb=n.boundingBox(); if(pos.x>=bb.x1&&pos.x<=bb.x2&&pos.y>=bb.y1&&pos.y<=bb.y2){ const q=n.position(),dd=(q.x-pos.x)*(q.x-pos.x)+(q.y-pos.y)*(q.y-pos.y); if(dd<best){best=dd;tgt=n;} } });
+    if(tgt){ const a=PEOPLE.find(x=>String(x.id)===nd.id()), b=PEOPLE.find(x=>String(x.id)===tgt.id()); if(a&&b&&a.id!==b.id){ renderGraph(); openConnectModal(a,b); return; } } } }catch(_){ }
+  try{ _savePins(cy.$("node:selected").union(nd)); }catch(_){ } });
 async function unpinAll(){
   _pinsLocal={}; try{ localStorage.removeItem("map_pins"); }catch(_){ }
   PEOPLE.forEach(p=>{ p.map_x=null; p.map_y=null; });
@@ -1958,7 +1964,7 @@ function _pulse(p){
   return {g:"🌘",label:"Embers",col:"#A67B4F",detail:"quiet for "+ago.replace(" ago","")};
 }
 function _pulseChip(p){ const u=_pulse(p);
-  return `<span id="pulse-chip" title="The pulse of this bond — from the last word and the desired cadence" style="display:inline-flex;align-items:center;gap:6px;font-family:var(--f-data,monospace);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:${u.col};border:1px solid ${u.col}55;border-radius:20px;padding:3px 11px;margin-top:6px">${u.g} ${u.label} <span style="color:var(--muted);text-transform:none;letter-spacing:.02em">· ${u.detail}</span></span>`;
+  return `<span id="pulse-chip" title="The pulse of this bond — from the last word and the desired cadence" style="display:inline-flex;align-items:center;gap:6px;font-family:var(--f-data,monospace);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:${u.col};border:1px solid ${u.col}55;border-radius:20px;padding:3px 11px;margin-top:6px">${u.g} ${u.label} <span style="color:var(--muted);text-transform:none;letter-spacing:.02em">· ${u.detail}</span><span id="pulse-woven" style="color:var(--muted);text-transform:none;letter-spacing:.02em"></span></span>`;
 }
 function coolOf(x){ if(!x||!x.last_contact)return false; const days=Math.floor((Date.now()-new Date(x.last_contact))/86400000); return days>(x.cadence_days||180); }
 function _today(){ const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; }
@@ -2113,6 +2119,17 @@ async function addChild(parentId, childId){
   }catch(err){ toast("Couldn't save",true); console.warn(err); }
 }
 
+async function makeSiblings(a,b){
+  const ap=a.parentIds||[], bp=b.parentIds||[]; const parents=[...new Set([...ap,...bp])];
+  if(!parents.length){ toast("To bind them as siblings, first give one of them a parent — the other then joins the same bloodline",true); return; }
+  try{
+    for(const pid of parents){
+      if(!(a.parentIds||[]).includes(pid)){ await sbInsert("parent_child",[{parent_id:pid,child_id:a.id}],"resolution=ignore-duplicates,return=minimal"); a.parentIds=[...new Set([...(a.parentIds||[]),pid])]; const P=PEOPLE.find(x=>x.id===pid); if(P)P.childrenIds=[...new Set([...(P.childrenIds||[]),a.id])]; }
+      if(!(b.parentIds||[]).includes(pid)){ await sbInsert("parent_child",[{parent_id:pid,child_id:b.id}],"resolution=ignore-duplicates,return=minimal"); b.parentIds=[...new Set([...(b.parentIds||[]),pid])]; const P=PEOPLE.find(x=>x.id===pid); if(P)P.childrenIds=[...new Set([...(P.childrenIds||[]),b.id])]; }
+    }
+    toast(`${a.name} & ${b.name} are now siblings 👫`); renderGraph(); if(currentPerson)selectPerson(a);
+  }catch(err){ toast("Couldn\u2019t save",true); console.warn(err); }
+}
 // Photo: pick → square crop (pan/zoom to centre the face) → upload
 function pickPhoto(person){
   const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";

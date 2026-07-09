@@ -1591,7 +1591,7 @@ function _pulse(p){
   return {g:"🌘",label:"Embers",col:"#A67B4F",detail:"quiet for "+ago.replace(" ago","")};
 }
 function _pulseChip(p){ const u=_pulse(p);
-  return `<span id="pulse-chip" title="The pulse of this bond — from the last word and the desired cadence" style="display:inline-flex;align-items:center;gap:6px;font-family:var(--f-data,monospace);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:${u.col};border:1px solid ${u.col}55;border-radius:20px;padding:3px 11px;margin-top:6px">${u.g} ${u.label} <span style="color:var(--muted);text-transform:none;letter-spacing:.02em">· ${u.detail}</span></span>`;
+  return `<span id="pulse-chip" title="The pulse of this bond — from the last word and the desired cadence" style="display:inline-flex;align-items:center;gap:6px;font-family:var(--f-data,monospace);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:${u.col};border:1px solid ${u.col}55;border-radius:20px;padding:3px 11px;margin-top:6px">${u.g} ${u.label} <span style="color:var(--muted);text-transform:none;letter-spacing:.02em">· ${u.detail}</span><span id="pulse-woven" style="color:var(--muted);text-transform:none;letter-spacing:.02em"></span></span>`;
 }
 function coolOf(x){ if(!x||!x.last_contact)return false; const days=Math.floor((Date.now()-new Date(x.last_contact))/86400000); return days>(x.cadence_days||180); }
 function _today(){ const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; }
@@ -1641,7 +1641,7 @@ async function loadMoments(who){
           <div style="font-size:9.5px;color:var(--muted);font-family:var(--f-data,monospace);margin-top:1px">${x.d?fmtDate(x.d):"—"}</div>
         </div>`).join("")+`</div>`
       : `<span style="color:var(--muted)">The thread is unwoven yet — record a call, a gift, a voice, and the life gathers here.</span>`;
-    try{ const ch=document.getElementById("pulse-chip"); if(ch&&th.length){ const n=th.length; if(!/woven/.test(ch.textContent)) ch.insertAdjacentHTML("beforeend",`<span style="color:var(--muted);text-transform:none;letter-spacing:.02em"> · ${n} moment${n===1?"":"s"} woven</span>`); } }catch(_){ }
+    try{ if(!currentPerson||currentPerson.id===who.id){ const wv=document.getElementById("pulse-woven"); if(wv){ const n=th.length; wv.textContent = n?` · ${n} moment${n===1?"":"s"} woven`:""; } } }catch(_){ }
     el.querySelectorAll(".lt-row").forEach(dv=>dv.addEventListener("click",e=>{
       if(e.target.closest("audio")||e.target.closest(".vn-del"))return;
       const x=th[+dv.dataset.i]; if(!x)return;
